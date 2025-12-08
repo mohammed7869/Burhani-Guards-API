@@ -1,0 +1,98 @@
+================================================================================
+                    BURHANI GUARDS API - QUICK START GUIDE
+================================================================================
+
+STEP 1: Open Command Prompt or PowerShell
+----------------------------------------
+  Navigate to the API directory:
+    cd "D:\CCS Projects\Flutter Codes\Burhani Guards\burhaniguardsapi"
+
+
+STEP 2: Restore Packages
+-------------------------
+    dotnet restore
+
+
+STEP 3: Build Project
+---------------------
+    dotnet build
+
+
+STEP 4: Run API
+---------------
+    dotnet run
+
+  Wait for this message:
+    "Now listening on: https://localhost:5001"
+
+
+STEP 5: Open Swagger UI
+-----------------------
+  In your browser, go to:
+    https://localhost:5001/swagger
+
+
+STEP 6: Test Captain Login
+--------------------------
+  In Swagger UI:
+  1. Click "POST /api/auth/captain/login"
+  2. Click "Try it out"
+  3. Enter:
+     {
+       "email": "hatimghadiyali53@gmail.com",
+       "password": "123456"
+     }
+  4. Click "Execute"
+  5. Should return Status 200 with token
+
+
+STEP 7: Prepare MongoDB for Members
+------------------------------------
+  Option A - MongoDB Compass (Recommended):
+    1. Download: https://www.mongodb.com/try/download/compass
+    2. Connect with your connection string
+    3. Go to: burhaniguards database → members collection
+    4. Insert document:
+       {
+         "email": "member@example.com",
+         "passwordHash": "<generate-using-bcrypt-generator.com>",
+         "fullName": "Test Member",
+         "role": "member",
+         "isActive": true
+       }
+
+  Option B - Generate BCrypt Hash:
+    1. Visit: https://bcrypt-generator.com/
+    2. Enter password (e.g., "member123")
+    3. Set rounds: 11
+    4. Copy the hash
+    5. Use in MongoDB document
+
+
+STEP 8: Test Member Login
+--------------------------
+  In Swagger UI:
+  1. Click "POST /api/auth/member/login"
+  2. Click "Try it out"
+  3. Enter:
+     {
+       "email": "member@example.com",
+       "password": "member123"
+     }
+  4. Click "Execute"
+  5. Should return Status 200 with token
+
+
+================================================================================
+                              TROUBLESHOOTING
+================================================================================
+
+• "dotnet not found" → Install .NET 8 SDK
+• "Port 5001 in use" → Stop other apps or change port
+• "MongoDB connection failed" → Check IP whitelist in Atlas
+• "401 Unauthorized" → Verify passwordHash is valid BCrypt hash
+
+================================================================================
+For detailed instructions, see: SETUP_GUIDE.md
+================================================================================
+
