@@ -3,6 +3,7 @@ using BurhaniGuards.Api.Constants;
 using BurhaniGuards.Api.Contracts.Requests;
 using BurhaniGuards.Api.Repositories;
 using BurhaniGuards.Api.ViewModel;
+using Microsoft.AspNetCore.Http;
 
 namespace BurhaniGuards.Api.Services;
 
@@ -16,16 +17,21 @@ public interface IUserService
     Task<UserViewModel> GetProfile(CurrentUserViewModel user);
     Task EditProfile(UserEditViewModel viewmodel);
     Task<UserViewModel?> Login(string itsId, string password);
+    Task<UserViewModel?> LoginByEmail(string email, string password);
     Task<bool> ChangePassword(ChangePasswordRequest viewmodel);
+    Task UpdateProfileImage(int id, string profilePath);
 }
 
 public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private CurrentUserViewModel? GetCurrentUser() => _httpContextAccessor.HttpContext?.Items["User"] as CurrentUserViewModel;
 
-    public UserService(IUserRepository userRepository)
+    public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
     {
         _userRepository = userRepository;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<int> Add(UserCreateViewModel viewmodel)
@@ -51,9 +57,10 @@ public class UserService : IUserService
         return await _userRepository.Add(user);
     }
 
-    public Task Delete(int id)
+    public async Task Delete(int id)
     {
-        throw new NotImplementedException();
+        var currentUser = GetCurrentUser();
+        await _userRepository.Delete(id, currentUser);
     }
 
     public async Task Edit(UserEditViewModel viewmodel)
@@ -154,6 +161,51 @@ public class UserService : IUserService
         }
     }
 
+    public async Task<UserViewModel?> LoginByEmail(string email, string password)
+    {
+        try
+        {
+            var user = await _userRepository.GetByEmail(email);
+
+            if (user == null)
+            {
+                return null;
+            }
+
+            // Check if new password exists - if yes, use new password; otherwise use temporary password
+            bool passwordValid = false;
+
+            if (!string.IsNullOrWhiteSpace(user.NewPasswordHash))
+            {
+                // New password exists - verify against new password
+                passwordValid = BCrypt.Net.BCrypt.Verify(password, user.NewPasswordHash);
+            }
+            else if (!string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                // No new password - verify against temporary password
+                passwordValid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+            }
+            else
+            {
+                // No password hash at all
+                return null;
+            }
+
+            if (!passwordValid)
+            {
+                return null;
+            }
+
+            return MapToViewModel(user);
+        }
+        catch (Exception ex)
+        {
+            // Log the exception for debugging (in production, use proper logging)
+            System.Diagnostics.Debug.WriteLine($"LoginByEmail error: {ex.Message}");
+            return null;
+        }
+    }
+
     public async Task<bool> ChangePassword(ChangePasswordRequest viewmodel)
     {
         if (string.IsNullOrWhiteSpace(viewmodel.ItsNumber) ||
@@ -202,6 +254,17 @@ public class UserService : IUserService
             System.Diagnostics.Debug.WriteLine($"ChangePassword stack trace: {ex.StackTrace}");
             return false;
         }
+    }
+
+    public async Task UpdateProfileImage(int id, string profilePath)
+    {
+        var user = new UserModel
+        {
+            Id = id,
+            Profile = profilePath
+        };
+
+        await _userRepository.UpdateProfileImage(user);
     }
 
     private UserViewModel MapToViewModel(UserModel user)

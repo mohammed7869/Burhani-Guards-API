@@ -48,6 +48,7 @@ public class AuthController : BaseController
 
         var token = _tokenService.GenerateToken(user.itsId ?? user.email, GetRoleFromRank(user.rank, user.roles));
         var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
+        var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
         
         var auth = new AuthResponse(
             user.id,
@@ -64,10 +65,132 @@ public class AuthController : BaseController
             user.contact,
             GetRoleFromRank(user.rank, user.roles),
             token,
-            requiresPasswordChange
+            requiresPasswordChange,
+            hasNewPasswordHash
         );
 
         return Ok(auth);
+    }
+
+    [AllowAnonymous]
+    [HttpPost("admin/login")]
+    public async Task<IActionResult> AdminLogin([FromBody] LoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            return BadRequest(new { message = "Password is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(new { message = "Email is required" });
+        }
+
+        try
+        {
+            var user = await _userService.LoginByEmail(request.Email, request.Password);
+            
+            if (user == null)
+            {
+                return BadRequest(new { message = "Invalid email or password" });
+            }
+
+            // Check if user has ResourceAdmin role (role = 7)
+            if (user.roles != MemberRank.ResourceAdmin)
+            {
+                return BadRequest(new { message = "Access denied. Only Resource Admin can login to the Admin Panel." });
+            }
+
+            var token = _tokenService.GenerateToken(user.email ?? user.itsId, GetRoleFromRank(user.rank, user.roles));
+            var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
+            var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
+            
+            var auth = new AuthResponse(
+                user.id,
+                user.profile,
+                user.itsId,
+                user.fullName,
+                user.email,
+                user.rank,
+                user.roles,
+                user.jamiyat,
+                user.jamaat,
+                user.gender,
+                user.age,
+                user.contact,
+                GetRoleFromRank(user.rank, user.roles),
+                token,
+                requiresPasswordChange,
+                hasNewPasswordHash
+            );
+
+            return Ok(auth);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("captain/login")]
+    public async Task<IActionResult> CaptainLogin([FromBody] LoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            return BadRequest(new { message = "Password is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(new { message = "Email is required" });
+        }
+
+        try
+        {
+            var user = await _userService.LoginByEmail(request.Email, request.Password);
+            
+            if (user == null)
+            {
+                return BadRequest(new { message = "Invalid email or password" });
+            }
+
+            // Check if user has ResourceAdmin role (role = 7)
+            // Only Resource Admin (role = 7) can login to the Admin Panel
+            if (user.roles != MemberRank.ResourceAdmin)
+            {
+                return BadRequest(new { message = "Access denied. Only Resource Admin can login to the Admin Panel." });
+            }
+
+            var token = _tokenService.GenerateToken(user.email ?? user.itsId, GetRoleFromRank(user.rank, user.roles));
+            var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
+            var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
+            
+            var auth = new AuthResponse(
+                user.id,
+                user.profile,
+                user.itsId,
+                user.fullName,
+                user.email,
+                user.rank,
+                user.roles,
+                user.jamiyat,
+                user.jamaat,
+                user.gender,
+                user.age,
+                user.contact,
+                GetRoleFromRank(user.rank, user.roles),
+                token,
+                requiresPasswordChange,
+                hasNewPasswordHash
+            );
+
+            return Ok(auth);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [AllowAnonymous]

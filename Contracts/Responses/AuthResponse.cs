@@ -15,5 +15,6 @@ public sealed record AuthResponse(
     string? Contact,
     string Role,
     string Token,
-    bool RequiresPasswordChange = false
+    bool RequiresPasswordChange = false,
+    bool HasNewPasswordHash = false
 );

@@ -15,8 +15,9 @@ public interface IUserRepository
     Task<UserModel> GetProfile(CurrentUserViewModel user);
     Task EditProfile(UserModel viewmodel);
     Task<UserModel?> GetByItsId(string itsId);
-    Task<UserModel> GetByEmail(string email);
+    Task<UserModel?> GetByEmail(string email);
     Task UpdatePassword(UserModel model);
+    Task UpdateProfileImage(UserModel model);
 }
 
 public class UserRepository : IUserRepository
@@ -83,16 +84,18 @@ public class UserRepository : IUserRepository
     {
         using (var connection = _context.CreateConnection())
         {
-            var user = await connection.GetAsync<UserModel>(viewmodel.Id);
+            // Check if user exists
+            var checkUserSql = @"SELECT 1 FROM `users` WHERE `id` = @Id";
+            var userExists = await connection.QueryFirstOrDefaultAsync<int?>(checkUserSql, new { Id = viewmodel.Id });
 
-            if (user == null)
+            if (!userExists.HasValue)
             {
                 throw new Exception("User not found");
             }
 
             // Check email duplicate
             var checkDupSql2 = @"SELECT 1 FROM `users` WHERE `id` <> @Id AND `email` = @Email AND `is_active` = 1";
-            var exists2 = await connection.QueryAsync<int?>(checkDupSql2, viewmodel);
+            var exists2 = await connection.QueryAsync<int?>(checkDupSql2, new { Id = viewmodel.Id, Email = viewmodel.Email });
 
             if (exists2.FirstOrDefault().HasValue)
             {
@@ -103,7 +106,7 @@ public class UserRepository : IUserRepository
             if (!string.IsNullOrWhiteSpace(viewmodel.ItsId))
             {
                 var checkDupSql = @"SELECT 1 FROM `users` WHERE `id` <> @Id AND `its_id` = @ItsId AND `is_active` = 1";
-                var exists = await connection.QueryAsync<int?>(checkDupSql, viewmodel);
+                var exists = await connection.QueryAsync<int?>(checkDupSql, new { Id = viewmodel.Id, ItsId = viewmodel.ItsId });
 
                 if (exists.FirstOrDefault().HasValue)
                 {
@@ -111,19 +114,43 @@ public class UserRepository : IUserRepository
                 }
             }
 
-            user.FullName = viewmodel.FullName;
-            user.Email = viewmodel.Email;
-            user.ItsId = viewmodel.ItsId;
-            user.Rank = viewmodel.Rank;
-            user.Roles = viewmodel.Roles;
-            user.Jamiyat = viewmodel.Jamiyat;
-            user.Jamaat = viewmodel.Jamaat;
-            user.Gender = viewmodel.Gender;
-            user.Age = viewmodel.Age;
-            user.Contact = viewmodel.Contact;
-            user.UpdatedAt = DateTime.UtcNow;
+            // Use explicit SQL update with snake_case column names
+            var updateSql = @"
+                UPDATE `users` 
+                SET 
+                    `its_id` = @ItsId,
+                    `full_name` = @FullName,
+                    `email` = @Email,
+                    `rank` = @Rank,
+                    `roles` = @Roles,
+                    `jamiyat` = @Jamiyat,
+                    `jamaat` = @Jamaat,
+                    `gender` = @Gender,
+                    `age` = @Age,
+                    `contact` = @Contact,
+                    `updated_at` = CURRENT_TIMESTAMP
+                WHERE `id` = @Id
+            ";
 
-            await connection.UpdateAsync(user);
+            var rowsAffected = await connection.ExecuteAsync(updateSql, new
+            {
+                Id = viewmodel.Id,
+                ItsId = viewmodel.ItsId,
+                FullName = viewmodel.FullName,
+                Email = viewmodel.Email,
+                Rank = viewmodel.Rank,
+                Roles = viewmodel.Roles,
+                Jamiyat = viewmodel.Jamiyat,
+                Jamaat = viewmodel.Jamaat,
+                Gender = viewmodel.Gender,
+                Age = viewmodel.Age,
+                Contact = viewmodel.Contact
+            });
+
+            if (rowsAffected == 0)
+            {
+                throw new Exception("Failed to update user");
+            }
         }
     }
 
@@ -132,13 +159,20 @@ public class UserRepository : IUserRepository
         string sql = @"
             SELECT 
                 u.`id`,
+                u.`profile`,
                 u.`its_id` AS itsId,
-                u.`full_name` AS fullName,
-                u.`email`,
                 u.`rank`,
                 u.`roles`,
+                u.`jamiyat`,
+                u.`jamaat`,
+                u.`full_name` AS fullName,
+                u.`gender`,
+                u.`email`,
+                u.`age`,
+                u.`contact`,
                 u.`is_active` AS isActive,
-                u.`created_at` AS createdAt
+                u.`created_at` AS createdAt,
+                u.`updated_at` AS updatedAt
             FROM `users` u
             WHERE u.`is_active` = 1
             ORDER BY u.`created_at` DESC
@@ -155,7 +189,31 @@ public class UserRepository : IUserRepository
     {
         using (var connection = _context.CreateConnection())
         {
-            var user = await connection.GetAsync<UserModel>(id);
+            // Use explicit column mapping to ensure proper mapping
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS `Rank`,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `password_hash` AS PasswordHash,
+                    `new_password_hash` AS NewPasswordHash,
+                    `is_active` AS IsActive,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `users` 
+                WHERE `id` = @Id
+            ";
+
+            var user = await connection.QueryFirstOrDefaultAsync<UserModel>(sql, new { Id = id });
 
             if (user == null)
             {
@@ -249,22 +307,35 @@ public class UserRepository : IUserRepository
         }
     }
 
-    public async Task<UserModel> GetByEmail(string email)
+    public async Task<UserModel?> GetByEmail(string email)
     {
         using (var connection = _context.CreateConnection())
         {
+            // Use explicit column mapping to ensure proper mapping
             var sql = @"
-                SELECT *
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS `Rank`,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `password_hash` AS PasswordHash,
+                    `new_password_hash` AS NewPasswordHash,
+                    `is_active` AS IsActive,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
                 FROM `users` 
                 WHERE `email` = @Email AND `is_active` = 1
             ";
 
             var user = await connection.QueryFirstOrDefaultAsync<UserModel>(sql, new { Email = email });
-
-            if (user == null)
-            {
-                throw new Exception("No account found with this email.");
-            }
 
             return user;
         }
@@ -286,6 +357,30 @@ public class UserRepository : IUserRepository
             { 
                 NewPasswordHash = model.NewPasswordHash,
                 ItsId = model.ItsId
+            });
+
+            if (rowsAffected == 0)
+            {
+                throw new Exception("User not found or inactive");
+            }
+        }
+    }
+
+    public async Task UpdateProfileImage(UserModel model)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                UPDATE `users` 
+                SET `profile` = @Profile, 
+                    `updated_at` = CURRENT_TIMESTAMP
+                WHERE `id` = @Id AND `is_active` = 1
+            ";
+
+            var rowsAffected = await connection.ExecuteAsync(sql, new 
+            { 
+                Profile = model.Profile,
+                Id = model.Id
             });
 
             if (rowsAffected == 0)
