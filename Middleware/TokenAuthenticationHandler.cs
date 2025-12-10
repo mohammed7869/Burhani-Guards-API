@@ -41,7 +41,7 @@ public class TokenAuthenticationHandler : AuthenticationHandler<AuthenticationSc
         if (!string.IsNullOrWhiteSpace(token))
         {
             // Token is present - create a claims identity
-            // In a production system, you'd validate the token and extract user info
+            // Store token in claims - middleware will use it to look up user
             var claims = new[] 
             { 
                 new Claim(ClaimTypes.NameIdentifier, token),

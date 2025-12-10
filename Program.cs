@@ -80,6 +80,7 @@ builder.Services.AddHttpContextAccessor();
 
 // Register repositories (Dapper-based repositories for users table)
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IMiqaatRepository, MiqaatRepository>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 // Register old repositories (for backward compatibility if needed)
@@ -89,7 +90,9 @@ builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.IMemberSnap
 
 // Register services
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton<ITokenStore, TokenStore>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IMiqaatService, MiqaatService>();
 
 // Register old services (for backward compatibility if needed)
 builder.Services.AddScoped<ICaptainAuthService, CaptainAuthService>();
@@ -152,6 +155,9 @@ if (!app.Environment.IsDevelopment())
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Add middleware to set user context after authentication
+app.UseMiddleware<BurhaniGuards.Api.Middleware.UserContextMiddleware>();
 
 // Serve static files from upload directory
 var uploadPath = @"C:\var\www\bgp_uploads";

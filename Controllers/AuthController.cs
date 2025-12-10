@@ -16,13 +16,16 @@ public class AuthController : BaseController
 {
     private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
+    private readonly ITokenStore _tokenStore;
 
     public AuthController(
         IUserService userService,
-        ITokenService tokenService)
+        ITokenService tokenService,
+        ITokenStore tokenStore)
     {
         _userService = userService;
         _tokenService = tokenService;
+        _tokenStore = tokenStore;
     }
 
     [AllowAnonymous]
@@ -50,12 +53,25 @@ public class AuthController : BaseController
         var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
         var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
         
+        // Store token->user mapping
+        var currentUser = new CurrentUserViewModel
+        {
+            id = user.id,
+            itsId = user.itsId,
+            fullName = user.fullName,
+            email = user.email,
+            rank = user.rank,
+            roles = user.roles,
+            requiresPasswordChange = requiresPasswordChange
+        };
+        _tokenStore.StoreToken(token, currentUser);
+        
         var auth = new AuthResponse(
             user.id,
             user.profile,
             user.itsId,
             user.fullName,
-            user.email,
+            user.email ?? string.Empty,
             user.rank,
             user.roles,
             user.jamiyat,
@@ -105,12 +121,25 @@ public class AuthController : BaseController
             var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
             var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
             
+            // Store token->user mapping
+            var currentUser = new CurrentUserViewModel
+            {
+                id = user.id,
+                itsId = user.itsId,
+                fullName = user.fullName,
+                email = user.email,
+                rank = user.rank,
+                roles = user.roles,
+                requiresPasswordChange = requiresPasswordChange
+            };
+            _tokenStore.StoreToken(token, currentUser);
+            
             var auth = new AuthResponse(
                 user.id,
                 user.profile,
                 user.itsId,
                 user.fullName,
-                user.email,
+                user.email ?? string.Empty,
                 user.rank,
                 user.roles,
                 user.jamiyat,
@@ -166,12 +195,25 @@ public class AuthController : BaseController
             var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
             var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
             
+            // Store token->user mapping
+            var currentUser = new CurrentUserViewModel
+            {
+                id = user.id,
+                itsId = user.itsId,
+                fullName = user.fullName,
+                email = user.email,
+                rank = user.rank,
+                roles = user.roles,
+                requiresPasswordChange = requiresPasswordChange
+            };
+            _tokenStore.StoreToken(token, currentUser);
+            
             var auth = new AuthResponse(
                 user.id,
                 user.profile,
                 user.itsId,
                 user.fullName,
-                user.email,
+                user.email ?? string.Empty,
                 user.rank,
                 user.roles,
                 user.jamiyat,

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\BurhaniGuards.Api.csproj": {}
+    "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\BurhaniGuards.Api.csproj": {}
   },
   "projects": {
-    "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\BurhaniGuards.Api.csproj": {
+    "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\BurhaniGuards.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\BurhaniGuards.Api.csproj",
+        "projectUniqueName": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\BurhaniGuards.Api.csproj",
         "projectName": "BurhaniGuards.Api",
-        "projectPath": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\BurhaniGuards.Api.csproj",
+        "projectPath": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\BurhaniGuards.Api.csproj",
         "packagesPath": "C:\\Users\\Adhik\\.nuget\\packages\\",
-        "outputPath": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\obj\\",
+        "outputPath": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
