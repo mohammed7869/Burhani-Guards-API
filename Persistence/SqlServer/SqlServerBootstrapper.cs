@@ -70,6 +70,28 @@ public sealed class SqlServerBootstrapper
         }
         catch { } // Index might already exist
 
+        // Migration: Rename users table to members if users exists and members doesn't
+        try
+        {
+            var usersExists = await connection.QueryFirstOrDefaultAsync<int?>(@"
+                SELECT COUNT(*) 
+                FROM sys.objects 
+                WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND type in (N'U')
+            ");
+            
+            var membersExists = await connection.QueryFirstOrDefaultAsync<int?>(@"
+                SELECT COUNT(*) 
+                FROM sys.objects 
+                WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND type in (N'U')
+            ");
+
+            if (usersExists > 0 && membersExists == 0)
+            {
+                await connection.ExecuteAsync("EXEC sp_rename '[dbo].[users]', 'members';");
+            }
+        }
+        catch { } // Migration might fail if tables don't exist
+
         // Create member_snapshots table
         await connection.ExecuteAsync("""
             IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[member_snapshots]') AND type in (N'U'))
@@ -82,6 +104,101 @@ public sealed class SqlServerBootstrapper
                     [last_login] DATETIME NOT NULL DEFAULT GETDATE()
                 );
                 CREATE INDEX IX_member_snapshots_email ON [dbo].[member_snapshots]([email]);
+            END
+            """);
+
+        // Migration: Add jamiyat_id and jamaat_id columns to members table if they don't exist
+        try
+        {
+            await connection.ExecuteAsync("""
+                IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND type in (N'U'))
+                BEGIN
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND name = 'jamiyat_id')
+                    BEGIN
+                        ALTER TABLE [dbo].[members] ADD [jamiyat_id] INT NULL;
+                        CREATE INDEX IX_members_jamiyat_id ON [dbo].[members]([jamiyat_id]);
+                    END
+                END
+                """);
+        }
+        catch { } // Column might already exist
+
+        try
+        {
+            await connection.ExecuteAsync("""
+                IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND type in (N'U'))
+                BEGIN
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND name = 'jamaat_id')
+                    BEGIN
+                        ALTER TABLE [dbo].[members] ADD [jamaat_id] INT NULL;
+                        CREATE INDEX IX_members_jamaat_id ON [dbo].[members]([jamaat_id]);
+                    END
+                END
+                """);
+        }
+        catch { } // Column might already exist
+
+        // Migration: Populate jamiyat_id and jamaat_id from existing text values
+        try
+        {
+            await connection.ExecuteAsync("""
+                IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND type in (N'U'))
+                BEGIN
+                    UPDATE [dbo].[members] 
+                    SET [jamiyat_id] = CASE 
+                        WHEN [jamiyat] = 'Poona' THEN 1 
+                        ELSE NULL 
+                    END
+                    WHERE [jamiyat_id] IS NULL AND [jamiyat] IS NOT NULL;
+
+                    UPDATE [dbo].[members] 
+                    SET [jamaat_id] = CASE 
+                        WHEN [jamaat] = 'BARAMATI' THEN 1 
+                        WHEN [jamaat] = 'FAKHRI MOHALLA (POONA)' THEN 2 
+                        WHEN [jamaat] = 'ZAINI MOHALLA (POONA)' THEN 3 
+                        WHEN [jamaat] = 'KALIMI MOHALLA (POONA)' THEN 4 
+                        WHEN [jamaat] = 'AHMEDNAGAR' THEN 5 
+                        WHEN [jamaat] = 'IMADI MOHALLA (POONA)' THEN 6 
+                        WHEN [jamaat] = 'KASARWADI' THEN 7 
+                        WHEN [jamaat] = 'KHADKI (POONA)' THEN 8 
+                        WHEN [jamaat] = 'LONAVALA' THEN 9 
+                        WHEN [jamaat] = 'MUFADDAL MOHALLA (POONA)' THEN 10 
+                        WHEN [jamaat] = 'POONA' THEN 11 
+                        WHEN [jamaat] = 'SAIFEE MOHALLAH (POONA)' THEN 12 
+                        WHEN [jamaat] = 'TAIYEBI MOHALLA (POONA)' THEN 13 
+                        WHEN [jamaat] = 'FATEMI MOHALLA (POONA)' THEN 14 
+                        ELSE NULL 
+                    END
+                    WHERE [jamaat_id] IS NULL AND [jamaat] IS NOT NULL;
+                END
+                """);
+        }
+        catch { } // Migration might fail if table doesn't exist
+
+        // Create miqaat_members table
+        await connection.ExecuteAsync("""
+            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[miqaat_members]') AND type in (N'U'))
+            BEGIN
+                CREATE TABLE [dbo].[miqaat_members] (
+                    [member_id] INT NOT NULL,
+                    [miqaat_id] BIGINT NOT NULL,
+                    [status] NVARCHAR(50) NULL,
+                    PRIMARY KEY ([member_id], [miqaat_id])
+                );
+                CREATE INDEX IX_miqaat_members_member_id ON [dbo].[miqaat_members]([member_id]);
+                CREATE INDEX IX_miqaat_members_miqaat_id ON [dbo].[miqaat_members]([miqaat_id]);
+                
+                IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_miqaat_members_member_id')
+                BEGIN
+                    ALTER TABLE [dbo].[miqaat_members]
+                    ADD CONSTRAINT FK_miqaat_members_member_id FOREIGN KEY ([member_id]) REFERENCES [dbo].[members]([id]) ON DELETE CASCADE;
+                END
+                
+                IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_miqaat_members_miqaat_id')
+                BEGIN
+                    ALTER TABLE [dbo].[miqaat_members]
+                    ADD CONSTRAINT FK_miqaat_members_miqaat_id FOREIGN KEY ([miqaat_id]) REFERENCES [dbo].[local_miqaat]([id]) ON DELETE CASCADE;
+                END
             END
             """);
 

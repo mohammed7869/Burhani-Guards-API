@@ -1,6 +1,7 @@
 using BurhaniGuards.Api.BusinessModel;
 using BurhaniGuards.Api.Constants;
 using BurhaniGuards.Api.Contracts.Requests;
+using BurhaniGuards.Api.Contracts.Responses;
 using BurhaniGuards.Api.Repositories;
 using BurhaniGuards.Api.ViewModel;
 using Microsoft.AspNetCore.Http;
@@ -20,6 +21,7 @@ public interface IUserService
     Task<UserViewModel?> LoginByEmail(string email, string password);
     Task<bool> ChangePassword(ChangePasswordRequest viewmodel);
     Task UpdateProfileImage(int id, string profilePath);
+    Task<JamiyatJamaatResponse> GetJamiyatJamaatWithCounts();
 }
 
 public class UserService : IUserService
@@ -265,6 +267,12 @@ public class UserService : IUserService
         };
 
         await _userRepository.UpdateProfileImage(user);
+    }
+
+    public async Task<JamiyatJamaatResponse> GetJamiyatJamaatWithCounts()
+    {
+        var (jamiyats, jamaats) = await _userRepository.GetJamiyatJamaatWithCounts();
+        return new JamiyatJamaatResponse(jamiyats, jamaats);
     }
 
     private UserViewModel MapToViewModel(UserModel user)

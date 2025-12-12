@@ -12,6 +12,8 @@ public class MemberViewModel
     public int? roles { get; set; }
     public string? jamiyat { get; set; }
     public string? jamaat { get; set; }
+    public int? jamiyatId { get; set; }
+    public int? jamaatId { get; set; }
     public string fullName { get; set; } = string.Empty;
     public string? gender { get; set; }
     public string email { get; set; } = string.Empty;

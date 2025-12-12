@@ -12,7 +12,7 @@ public class MiqaatModel : BaseModel
     public DateTime TillDate { get; set; }
     public int VolunteerLimit { get; set; }
     public string? AboutMiqaat { get; set; }
-    public string AdminApproval { get; set; } = "Pending";
+    public AdminApprovalStatus AdminApproval { get; set; } = AdminApprovalStatus.Pending;
     public string CaptainName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

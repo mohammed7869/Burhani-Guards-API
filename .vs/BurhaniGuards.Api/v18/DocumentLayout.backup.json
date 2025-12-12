@@ -1,13 +1,17 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\",
+  "WorkspaceRootPath": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|d:\\ccs projects\\flutter codes\\burhani guards\\burhani-guards\\burhaniguardsapi\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|d:\\ccs projects\\burhani-guards_pune\\burhani-guards-api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|solutionrelative:controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|d:\\ccs projects\\flutter codes\\burhani guards\\burhani-guards\\burhaniguardsapi\\services\\userservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|d:\\ccs projects\\burhani-guards_pune\\burhani-guards-api\\services\\imiqaatservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|solutionrelative:services\\imiqaatservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|d:\\ccs projects\\burhani-guards_pune\\burhani-guards-api\\services\\userservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{74A617AA-E5AC-493D-BFA7-5C090AF5320A}|BurhaniGuards.Api.csproj|solutionrelative:services\\userservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
@@ -18,33 +22,44 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 1,
           "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "IMiqaatService.cs",
+              "DocumentMoniker": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\Services\\IMiqaatService.cs",
+              "RelativeDocumentMoniker": "Services\\IMiqaatService.cs",
+              "ToolTip": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\Services\\IMiqaatService.cs",
+              "RelativeToolTip": "Services\\IMiqaatService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAuwAUAAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-12-10T11:06:47.117Z"
+            },
             {
               "$type": "Document",
               "DocumentIndex": 0,
               "Title": "AuthController.cs",
-              "DocumentMoniker": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\Controllers\\AuthController.cs",
+              "DocumentMoniker": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\Controllers\\AuthController.cs",
               "RelativeDocumentMoniker": "Controllers\\AuthController.cs",
-              "ToolTip": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\Controllers\\AuthController.cs",
+              "ToolTip": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\Controllers\\AuthController.cs",
               "RelativeToolTip": "Controllers\\AuthController.cs",
-              "ViewState": "AgIAABQAAAAAAAAAAAASwCUAAAAIAAAAAAAAAA==",
+              "ViewState": "AgIAAAMBAAAAAAAAAAAcwAsBAAATAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-12-05T13:10:40.779Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "UserService.cs",
-              "DocumentMoniker": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\Services\\UserService.cs",
+              "DocumentMoniker": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\Services\\UserService.cs",
               "RelativeDocumentMoniker": "Services\\UserService.cs",
-              "ToolTip": "D:\\CCS Projects\\Flutter Codes\\Burhani Guards\\Burhani-Guards\\burhaniguardsapi\\Services\\UserService.cs",
+              "ToolTip": "D:\\CCS Projects\\Burhani-Guards_Pune\\Burhani-Guards-API\\Services\\UserService.cs",
               "RelativeToolTip": "Services\\UserService.cs",
-              "ViewState": "AgIAAG0AAAAAAAAAAAAawHAAAAAMAAAAAAAAAA==",
+              "ViewState": "AgIAAEMAAAAAAAAAAAAIwFQAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-12-05T13:08:09.435Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-05T13:08:09.435Z"
             }
           ]
         }

@@ -1,6 +1,48 @@
 [
   {
     "ContainingType": "BurhaniGuards.Api.Controllers.AuthController",
+    "Method": "AdminLogin",
+    "RelativePath": "api/{v}/admin/login",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.LoginRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.AuthController",
+    "Method": "CaptainLogin",
+    "RelativePath": "api/{v}/captain/login",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.LoginRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.AuthController",
     "Method": "ChangePassword",
     "RelativePath": "api/{v}/change-password",
     "HttpMethod": "POST",
@@ -31,6 +73,189 @@
       {
         "Name": "request",
         "Type": "BurhaniGuards.Api.Contracts.Requests.LoginRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "Create",
+    "RelativePath": "api/{v}/miqaat",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.CreateMiqaatRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "GetAll",
+    "RelativePath": "api/{v}/miqaat",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "GetById",
+    "RelativePath": "api/{v}/miqaat/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "Update",
+    "RelativePath": "api/{v}/miqaat/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.UpdateMiqaatRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "Delete",
+    "RelativePath": "api/{v}/miqaat/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "UpdateApprovalStatus",
+    "RelativePath": "api/{v}/miqaat/{id}/approval",
+    "HttpMethod": "PATCH",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.UpdateApprovalRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "UpdateMemberMiqaatStatus",
+    "RelativePath": "api/{v}/miqaat/{miqaatId}/member/{memberId}/status",
+    "HttpMethod": "PATCH",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "miqaatId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "memberId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.UpdateMemberMiqaatStatusRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.MiqaatController",
+    "Method": "GetMiqaatsByMemberId",
+    "RelativePath": "api/{v}/miqaat/member/{memberId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "memberId",
+        "Type": "System.Int32",
         "IsRequired": true
       },
       {
@@ -175,6 +400,48 @@
         "Type": "System.Int32",
         "IsRequired": true
       },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.UserController",
+    "Method": "UploadProfileImage",
+    "RelativePath": "api/{v}/users/{id}/upload-profile",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "file",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.UserController",
+    "Method": "GetJamiyatJamaatWithCounts",
+    "RelativePath": "api/{v}/users/jamiyat-jamaat",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
       {
         "Name": "v",
         "Type": "",

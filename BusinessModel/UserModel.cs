@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BurhaniGuards.Api.BusinessModel;
 
-[Table("users")]
+[Table("members")]
 public class UserModel : BaseModel
 {
     public string? Profile { get; set; }
@@ -11,6 +11,8 @@ public class UserModel : BaseModel
     public int? Roles { get; set; }
     public string? Jamiyat { get; set; }
     public string? Jamaat { get; set; }
+    public int? JamiyatId { get; set; }
+    public int? JamaatId { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string? Gender { get; set; }
     public string Email { get; set; } = string.Empty;

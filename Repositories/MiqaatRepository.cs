@@ -33,7 +33,7 @@ public class MiqaatRepository : IMiqaatRepository
                 TillDate = model.TillDate.Date,
                 model.VolunteerLimit,
                 model.AboutMiqaat,
-                model.AdminApproval,
+                AdminApproval = model.AdminApproval.ToString(),
                 model.CaptainName,
                 CreatedAt = model.CreatedAt,
                 UpdatedAt = model.UpdatedAt
@@ -124,7 +124,7 @@ public class MiqaatRepository : IMiqaatRepository
                 TillDate = model.TillDate.Date,
                 model.VolunteerLimit,
                 model.AboutMiqaat,
-                model.AdminApproval,
+                AdminApproval = model.AdminApproval.ToString(),
                 model.CaptainName,
                 UpdatedAt = DateTime.UtcNow
             });
@@ -137,6 +137,33 @@ public class MiqaatRepository : IMiqaatRepository
         {
             var sql = @"DELETE FROM `local_miqaat` WHERE `id` = @Id";
             await connection.ExecuteAsync(sql, new { Id = id });
+        }
+    }
+
+    public async Task<List<MiqaatModel>> GetByCaptainName(string captainName)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `miqaat_name` AS MiqaatName,
+                    `jamaat` AS Jamaat,
+                    `jamiyat` AS Jamiyat,
+                    `from_date` AS FromDate,
+                    `till_date` AS TillDate,
+                    `volunteer_limit` AS VolunteerLimit,
+                    `about_miqaat` AS AboutMiqaat,
+                    `admin_approval` AS AdminApproval,
+                    `captain_name` AS CaptainName,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `local_miqaat`
+                WHERE `captain_name` = @CaptainName
+                ORDER BY `created_at` DESC";
+
+            var miqaats = await connection.QueryAsync<MiqaatModel>(sql, new { CaptainName = captainName });
+            return miqaats.ToList();
         }
     }
 }

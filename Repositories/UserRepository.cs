@@ -1,4 +1,5 @@
 using BurhaniGuards.Api.BusinessModel;
+using BurhaniGuards.Api.Contracts.Responses;
 using BurhaniGuards.Api.ViewModel;
 using Dapper;
 using Dapper.Contrib.Extensions;
@@ -18,6 +19,7 @@ public interface IUserRepository
     Task<UserModel?> GetByEmail(string email);
     Task UpdatePassword(UserModel model);
     Task UpdateProfileImage(UserModel model);
+    Task<(List<JamiyatItem> Jamiyats, List<JamaatItem> Jamaats)> GetJamiyatJamaatWithCounts();
 }
 
 public class UserRepository : IUserRepository
@@ -39,7 +41,7 @@ public class UserRepository : IUserRepository
             // Check duplicate ITS ID if provided
             if (!string.IsNullOrWhiteSpace(viewmodel.ItsId))
             {
-                var checkDupSql = @"SELECT 1 FROM `users` WHERE `its_id` = @ItsId AND `is_active` = 1";
+                var checkDupSql = @"SELECT 1 FROM `members` WHERE `its_id` = @ItsId AND `is_active` = 1";
                 var exists = await connection.QueryAsync<int?>(checkDupSql, new { ItsId = viewmodel.ItsId });
 
                 if (exists.FirstOrDefault().HasValue)
@@ -49,7 +51,7 @@ public class UserRepository : IUserRepository
             }
 
             // Check duplicate email
-            var checkDupSql2 = @"SELECT 1 FROM `users` WHERE `email` = @Email AND `is_active` = 1";
+            var checkDupSql2 = @"SELECT 1 FROM `members` WHERE `email` = @Email AND `is_active` = 1";
             var exists2 = await connection.QueryAsync<int?>(checkDupSql2, new { Email = viewmodel.Email });
 
             if (exists2.FirstOrDefault().HasValue)
@@ -85,7 +87,7 @@ public class UserRepository : IUserRepository
         using (var connection = _context.CreateConnection())
         {
             // Check if user exists
-            var checkUserSql = @"SELECT 1 FROM `users` WHERE `id` = @Id";
+            var checkUserSql = @"SELECT 1 FROM `members` WHERE `id` = @Id";
             var userExists = await connection.QueryFirstOrDefaultAsync<int?>(checkUserSql, new { Id = viewmodel.Id });
 
             if (!userExists.HasValue)
@@ -94,7 +96,7 @@ public class UserRepository : IUserRepository
             }
 
             // Check email duplicate
-            var checkDupSql2 = @"SELECT 1 FROM `users` WHERE `id` <> @Id AND `email` = @Email AND `is_active` = 1";
+            var checkDupSql2 = @"SELECT 1 FROM `members` WHERE `id` <> @Id AND `email` = @Email AND `is_active` = 1";
             var exists2 = await connection.QueryAsync<int?>(checkDupSql2, new { Id = viewmodel.Id, Email = viewmodel.Email });
 
             if (exists2.FirstOrDefault().HasValue)
@@ -105,7 +107,7 @@ public class UserRepository : IUserRepository
             // Check ITS ID duplicate if provided
             if (!string.IsNullOrWhiteSpace(viewmodel.ItsId))
             {
-                var checkDupSql = @"SELECT 1 FROM `users` WHERE `id` <> @Id AND `its_id` = @ItsId AND `is_active` = 1";
+                var checkDupSql = @"SELECT 1 FROM `members` WHERE `id` <> @Id AND `its_id` = @ItsId AND `is_active` = 1";
                 var exists = await connection.QueryAsync<int?>(checkDupSql, new { Id = viewmodel.Id, ItsId = viewmodel.ItsId });
 
                 if (exists.FirstOrDefault().HasValue)
@@ -116,7 +118,7 @@ public class UserRepository : IUserRepository
 
             // Use explicit SQL update with snake_case column names
             var updateSql = @"
-                UPDATE `users` 
+                UPDATE `members` 
                 SET 
                     `its_id` = @ItsId,
                     `full_name` = @FullName,
@@ -125,6 +127,8 @@ public class UserRepository : IUserRepository
                     `roles` = @Roles,
                     `jamiyat` = @Jamiyat,
                     `jamaat` = @Jamaat,
+                    `jamiyat_id` = @JamiyatId,
+                    `jamaat_id` = @JamaatId,
                     `gender` = @Gender,
                     `age` = @Age,
                     `contact` = @Contact,
@@ -142,6 +146,8 @@ public class UserRepository : IUserRepository
                 Roles = viewmodel.Roles,
                 Jamiyat = viewmodel.Jamiyat,
                 Jamaat = viewmodel.Jamaat,
+                JamiyatId = viewmodel.JamiyatId,
+                JamaatId = viewmodel.JamaatId,
                 Gender = viewmodel.Gender,
                 Age = viewmodel.Age,
                 Contact = viewmodel.Contact
@@ -173,7 +179,7 @@ public class UserRepository : IUserRepository
                 u.`is_active` AS isActive,
                 u.`created_at` AS createdAt,
                 u.`updated_at` AS updatedAt
-            FROM `users` u
+            FROM `members` u
             WHERE u.`is_active` = 1
             ORDER BY u.`created_at` DESC
         ";
@@ -199,6 +205,8 @@ public class UserRepository : IUserRepository
                     `roles` AS Roles,
                     `jamiyat` AS Jamiyat,
                     `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
                     `full_name` AS FullName,
                     `gender` AS Gender,
                     `email` AS Email,
@@ -209,7 +217,7 @@ public class UserRepository : IUserRepository
                     `is_active` AS IsActive,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
-                FROM `users` 
+                FROM `members` 
                 WHERE `id` = @Id
             ";
 
@@ -256,7 +264,7 @@ public class UserRepository : IUserRepository
             }
 
             // Check email duplicate
-            var checkDupSql2 = @"SELECT 1 FROM `users` WHERE `id` <> @Id AND `email` = @Email AND `is_active` = 1";
+            var checkDupSql2 = @"SELECT 1 FROM `members` WHERE `id` <> @Id AND `email` = @Email AND `is_active` = 1";
             var exists2 = await connection.QueryAsync<int?>(checkDupSql2, viewmodel);
 
             if (exists2.FirstOrDefault().HasValue)
@@ -287,6 +295,8 @@ public class UserRepository : IUserRepository
                     `roles` AS Roles,
                     `jamiyat` AS Jamiyat,
                     `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
                     `full_name` AS FullName,
                     `gender` AS Gender,
                     `email` AS Email,
@@ -297,7 +307,7 @@ public class UserRepository : IUserRepository
                     `is_active` AS IsActive,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
-                FROM `users` 
+                FROM `members` 
                 WHERE `its_id` = @ItsId AND `is_active` = 1
             ";
 
@@ -321,6 +331,8 @@ public class UserRepository : IUserRepository
                     `roles` AS Roles,
                     `jamiyat` AS Jamiyat,
                     `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
                     `full_name` AS FullName,
                     `gender` AS Gender,
                     `email` AS Email,
@@ -331,7 +343,7 @@ public class UserRepository : IUserRepository
                     `is_active` AS IsActive,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
-                FROM `users` 
+                FROM `members` 
                 WHERE `email` = @Email AND `is_active` = 1
             ";
 
@@ -347,7 +359,7 @@ public class UserRepository : IUserRepository
         {
             // Update directly using ITS ID for better reliability
             var sql = @"
-                UPDATE `users` 
+                UPDATE `members` 
                 SET `new_password_hash` = @NewPasswordHash, 
                     `updated_at` = CURRENT_TIMESTAMP
                 WHERE `its_id` = @ItsId AND `is_active` = 1
@@ -371,7 +383,7 @@ public class UserRepository : IUserRepository
         using (var connection = _context.CreateConnection())
         {
             var sql = @"
-                UPDATE `users` 
+                UPDATE `members` 
                 SET `profile` = @Profile, 
                     `updated_at` = CURRENT_TIMESTAMP
                 WHERE `id` = @Id AND `is_active` = 1
@@ -387,6 +399,46 @@ public class UserRepository : IUserRepository
             {
                 throw new Exception("User not found or inactive");
             }
+        }
+    }
+
+    public async Task<(List<JamiyatItem> Jamiyats, List<JamaatItem> Jamaats)> GetJamiyatJamaatWithCounts()
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            // Get distinct jamiyat with counts
+            var jamiyatSql = @"
+                SELECT 
+                    jamiyat AS Name,
+                    COUNT(*) AS Count
+                FROM `members`
+                WHERE `is_active` = 1 
+                    AND `jamiyat` IS NOT NULL 
+                    AND `jamiyat` != ''
+                GROUP BY `jamiyat`
+                ORDER BY `jamiyat`
+            ";
+
+            var jamiyatResults = await connection.QueryAsync<(string Name, long Count)>(jamiyatSql);
+            var jamiyatList = jamiyatResults.Select(x => new JamiyatItem(x.Name, (int)x.Count)).ToList();
+
+            // Get distinct jamaat with counts
+            var jamaatSql = @"
+                SELECT 
+                    jamaat AS Name,
+                    COUNT(*) AS Count
+                FROM `members`
+                WHERE `is_active` = 1 
+                    AND `jamaat` IS NOT NULL 
+                    AND `jamaat` != ''
+                GROUP BY `jamaat`
+                ORDER BY `jamaat`
+            ";
+
+            var jamaatResults = await connection.QueryAsync<(string Name, long Count)>(jamaatSql);
+            var jamaatList = jamaatResults.Select(x => new JamaatItem(x.Name, (int)x.Count)).ToList();
+
+            return (jamiyatList, jamaatList);
         }
     }
 }

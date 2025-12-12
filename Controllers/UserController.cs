@@ -59,6 +59,20 @@ public class UserController : BaseController
         return Ok();
     }
 
+    [HttpGet("jamiyat-jamaat")]
+    public async Task<IActionResult> GetJamiyatJamaatWithCounts()
+    {
+        try
+        {
+            var response = await _userService.GetJamiyatJamaatWithCounts();
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{id}/upload-profile")]
     public async Task<IActionResult> UploadProfileImage(int id, IFormFile file)
     {

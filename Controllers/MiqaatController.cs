@@ -132,5 +132,56 @@ public class MiqaatController : BaseController
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpGet("member/{memberId}")]
+    public async Task<IActionResult> GetMiqaatsByMemberId(int memberId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            // Use CurrentUser to determine if Captain or Member
+            // If Captain: show all miqaats created by them
+            // If Member: show miqaats from miqaat_members table
+            var miqaats = await _miqaatService.GetMiqaatsForCurrentUser(
+                CurrentUser.id, 
+                CurrentUser.roles, 
+                CurrentUser.fullName
+            );
+            return Ok(miqaats);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPatch("{miqaatId}/member/{memberId}/status")]
+    public async Task<IActionResult> UpdateMemberMiqaatStatus(long miqaatId, int memberId, [FromBody] UpdateMemberMiqaatStatusRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Ensure the member can only update their own status
+        if (CurrentUser.id != memberId)
+        {
+            return Forbid("You can only update your own miqaat status");
+        }
+
+        try
+        {
+            await _miqaatService.UpdateMemberMiqaatStatus(memberId, miqaatId, request.Status);
+            return Ok(new { message = "Miqaat status updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }
 

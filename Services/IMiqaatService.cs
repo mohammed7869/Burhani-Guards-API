@@ -11,5 +11,9 @@ public interface IMiqaatService
     Task Update(long id, UpdateMiqaatRequest request);
     Task UpdateApprovalStatus(long id, string status);
     Task Delete(long id);
+    Task<List<MiqaatResponse>> GetMiqaatsByMemberId(int memberId);
+    Task<List<MiqaatResponse>> GetMiqaatsByCaptainName(string captainName);
+    Task<List<MiqaatResponse>> GetMiqaatsForCurrentUser(int userId, int? userRole, string? captainName);
+    Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status);
 }
 

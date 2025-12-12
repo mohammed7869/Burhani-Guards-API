@@ -1,9 +1,7 @@
 namespace BurhaniGuards.Api.Contracts.Requests;
 
-public sealed record UpdateApprovalRequest(
+public sealed record UpdateMemberMiqaatStatusRequest(
     string Status
 );
-
-
 
 

@@ -11,6 +11,8 @@ public class MemberModel : BaseModel
     public int? Roles { get; set; }
     public string? Jamiyat { get; set; }
     public string? Jamaat { get; set; }
+    public int? JamiyatId { get; set; }
+    public int? JamaatId { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string? Gender { get; set; }
     public string Email { get; set; } = string.Empty;

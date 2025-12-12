@@ -9,5 +9,6 @@ public interface IMiqaatRepository
     Task<MiqaatModel?> GetById(long id);
     Task Update(MiqaatModel model);
     Task Delete(long id);
+    Task<List<MiqaatModel>> GetByCaptainName(string captainName);
 }
 
