@@ -73,6 +73,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             FROM `local_miqaat` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`miqaat_id`
             WHERE mm.`member_id` = @MemberId
+                AND m.`admin_approval` = 'Approved'
             ORDER BY m.`created_at` DESC
         """;
 

@@ -5,3 +5,9 @@ public sealed record UpdateMemberMiqaatStatusRequest(
 );
 
 
+
+
+
+
+
+

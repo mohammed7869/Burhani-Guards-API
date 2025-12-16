@@ -267,6 +267,43 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "BurhaniGuards.Api.Controllers.NotificationController",
+    "Method": "RegisterDeviceToken",
+    "RelativePath": "api/{v}/notifications/register-token",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BurhaniGuards.Api.Contracts.Requests.RegisterDeviceTokenRequest",
+        "IsRequired": true
+      },
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BurhaniGuards.Api.Controllers.NotificationController",
+    "Method": "UnregisterDeviceToken",
+    "RelativePath": "api/{v}/notifications/unregister-token",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "v",
+        "Type": "",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "BurhaniGuards.Api.Controllers.AuthController",
     "Method": "UpdateProfile",
     "RelativePath": "api/{v}/update-profile",
