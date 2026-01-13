@@ -17,6 +17,12 @@ using MySqlMemberSnapshotRepository = BurhaniGuards.Api.Repositories.MySql.Membe
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel to listen on all interfaces (0.0.0.0) for network access
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5000); // Listen on all network interfaces on port 5000
+});
+
 // Configure JSON options to use camelCase
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -93,6 +99,7 @@ builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.IMemberSnap
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<ITokenStore, TokenStore>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IMiqaatService, MiqaatService>();
 
 // Register old services (for backward compatibility if needed)

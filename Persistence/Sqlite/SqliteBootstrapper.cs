@@ -160,11 +160,25 @@ public sealed class SqliteBootstrapper
                 member_id INTEGER NOT NULL,
                 miqaat_id INTEGER NOT NULL,
                 status TEXT,
+                final_status TEXT,
                 PRIMARY KEY (member_id, miqaat_id),
                 FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
                 FOREIGN KEY (miqaat_id) REFERENCES local_miqaat(id) ON DELETE CASCADE
             );
             """);
+        
+        // Add final_status column if it doesn't exist (for existing databases)
+        try
+        {
+            await connection.ExecuteAsync("""
+                ALTER TABLE miqaat_members 
+                ADD COLUMN final_status TEXT;
+            """);
+        }
+        catch
+        {
+            // Column already exists, ignore
+        }
         
         // Create indexes for miqaat_members
         await connection.ExecuteAsync("""

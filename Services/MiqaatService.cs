@@ -9,12 +9,20 @@ public class MiqaatService : IMiqaatService
 {
     private readonly IMiqaatRepository _miqaatRepository;
     private readonly IMiqaatMemberRepository _miqaatMemberRepository;
+    private readonly IUserRepository _userRepository;
+    private readonly IEmailService _emailService;
     private static readonly TimeZoneInfo IndiaTimeZone = GetIndiaTimeZone();
 
-    public MiqaatService(IMiqaatRepository miqaatRepository, IMiqaatMemberRepository miqaatMemberRepository)
+    public MiqaatService(
+        IMiqaatRepository miqaatRepository, 
+        IMiqaatMemberRepository miqaatMemberRepository,
+        IUserRepository userRepository,
+        IEmailService emailService)
     {
         _miqaatRepository = miqaatRepository;
         _miqaatMemberRepository = miqaatMemberRepository;
+        _userRepository = userRepository;
+        _emailService = emailService;
     }
 
     private static TimeZoneInfo GetIndiaTimeZone()
@@ -49,6 +57,16 @@ public class MiqaatService : IMiqaatService
         return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, IndiaTimeZone);
     }
 
+    private static int CalculateMiqaatDaysInclusive(DateTime fromDate, DateTime tillDate)
+    {
+        var days = (tillDate.Date - fromDate.Date).Days + 1;
+        if (days < 1)
+        {
+            throw new Exception("Till date must be on or after From date");
+        }
+        return days;
+    }
+
     public async Task<MiqaatResponse> Create(CreateMiqaatRequest request, string captainName)
     {
         var model = new MiqaatModel
@@ -58,6 +76,7 @@ public class MiqaatService : IMiqaatService
             Jamiyat = request.Jamiyat,
             FromDate = request.FromDate,
             TillDate = request.TillDate,
+            MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate),
             VolunteerLimit = request.VolunteerLimit,
             AboutMiqaat = request.AboutMiqaat,
             AdminApproval = AdminApprovalStatus.Pending,
@@ -74,6 +93,57 @@ public class MiqaatService : IMiqaatService
             throw new Exception("Failed to create miqaat");
         }
 
+        // Send email notifications when Captain creates Miqaat
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var adminEmails = await _userRepository.GetAdminEmailsAsync();
+                var captain = await _userRepository.GetCaptainByFullNameAsync(captainName);
+                
+                var emailList = new List<string>();
+                
+                // Add admin emails
+                emailList.AddRange(adminEmails);
+                
+                // Add captain email if found
+                if (captain != null && !string.IsNullOrWhiteSpace(captain.Email))
+                {
+                    emailList.Add(captain.Email);
+                }
+
+                if (emailList.Any())
+                {
+                    var subject = $"New Miqaat Created: {request.MiqaatName}";
+                    var body = $@"
+                        <html>
+                        <body>
+                            <h2>New Miqaat Created</h2>
+                            <p>A new Miqaat has been created and is pending approval.</p>
+                            <p><strong>Details:</strong></p>
+                            <ul>
+                                <li><strong>Miqaat Name:</strong> {request.MiqaatName}</li>
+                                <li><strong>Jamaat:</strong> {request.Jamaat}</li>
+                                <li><strong>Jamiyat:</strong> {request.Jamiyat}</li>
+                                <li><strong>From Date:</strong> {request.FromDate:yyyy-MM-dd}</li>
+                                <li><strong>Till Date:</strong> {request.TillDate:yyyy-MM-dd}</li>
+                                <li><strong>Volunteer Limit:</strong> {request.VolunteerLimit}</li>
+                                <li><strong>Captain:</strong> {captainName}</li>
+                                {(string.IsNullOrWhiteSpace(request.AboutMiqaat) ? "" : $"<li><strong>About:</strong> {request.AboutMiqaat}</li>")}
+                            </ul>
+                            <p>Status: <strong>Pending Approval</strong></p>
+                        </body>
+                        </html>";
+
+                    await _emailService.SendBulkEmailAsync(emailList, subject, body);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error sending email notification for miqaat creation: {ex.Message}");
+            }
+        });
+
         return new MiqaatResponse(
             createdMiqaat.Id,
             createdMiqaat.MiqaatName,
@@ -81,12 +151,15 @@ public class MiqaatService : IMiqaatService
             createdMiqaat.Jamiyat,
             createdMiqaat.FromDate,
             createdMiqaat.TillDate,
+            createdMiqaat.MiqaatDays,
             createdMiqaat.VolunteerLimit,
             createdMiqaat.AboutMiqaat,
             createdMiqaat.AdminApproval.ToString(),
             createdMiqaat.CaptainName,
             ConvertUtcToIst(createdMiqaat.CreatedAt),
-            ConvertUtcToIst(createdMiqaat.UpdatedAt)
+            ConvertUtcToIst(createdMiqaat.UpdatedAt),
+            null,
+            null
         );
     }
 
@@ -100,12 +173,15 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             m.FromDate,
             m.TillDate,
+            m.MiqaatDays,
             m.VolunteerLimit,
             m.AboutMiqaat,
             m.AdminApproval.ToString(),
             m.CaptainName,
             ConvertUtcToIst(m.CreatedAt),
-            ConvertUtcToIst(m.UpdatedAt)
+            ConvertUtcToIst(m.UpdatedAt),
+            null,
+            null
         )).ToList();
     }
 
@@ -124,12 +200,15 @@ public class MiqaatService : IMiqaatService
             miqaat.Jamiyat,
             miqaat.FromDate,
             miqaat.TillDate,
+            miqaat.MiqaatDays,
             miqaat.VolunteerLimit,
             miqaat.AboutMiqaat,
             miqaat.AdminApproval.ToString(),
             miqaat.CaptainName,
             ConvertUtcToIst(miqaat.CreatedAt),
-            ConvertUtcToIst(miqaat.UpdatedAt)
+            ConvertUtcToIst(miqaat.UpdatedAt),
+            null,
+            null
         );
     }
 
@@ -148,6 +227,7 @@ public class MiqaatService : IMiqaatService
         existingMiqaat.Jamiyat = request.Jamiyat;
         existingMiqaat.FromDate = request.FromDate;
         existingMiqaat.TillDate = request.TillDate;
+        existingMiqaat.MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate);
         existingMiqaat.VolunteerLimit = request.VolunteerLimit;
         existingMiqaat.AboutMiqaat = request.AboutMiqaat;
         
@@ -192,6 +272,101 @@ public class MiqaatService : IMiqaatService
         {
             await _miqaatMemberRepository.UpsertMembersForMiqaat(id, existingMiqaat.Jamaat, AdminApprovalStatus.Pending);
         }
+
+        // Send email notifications when Admin approves/rejects Miqaat
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var adminEmails = await _userRepository.GetAdminEmailsAsync();
+                var captain = await _userRepository.GetCaptainByFullNameAsync(existingMiqaat.CaptainName);
+                
+                var emailList = new List<string>();
+                
+                // Add admin emails
+                emailList.AddRange(adminEmails);
+                
+                // Add captain email if found
+                if (captain != null && !string.IsNullOrWhiteSpace(captain.Email))
+                {
+                    emailList.Add(captain.Email);
+                }
+
+                if (emailList.Any())
+                {
+                    var statusText = parsedStatus == AdminApprovalStatus.Approved ? "Approved" : 
+                                    parsedStatus == AdminApprovalStatus.Rejected ? "Rejected" : "Pending";
+                    var subject = $"Miqaat {statusText}: {existingMiqaat.MiqaatName}";
+                    var body = $@"
+                        <html>
+                        <body>
+                            <h2>Miqaat {statusText}</h2>
+                            <p>The Miqaat has been <strong>{statusText}</strong> by Admin.</p>
+                            <p><strong>Details:</strong></p>
+                            <ul>
+                                <li><strong>Miqaat Name:</strong> {existingMiqaat.MiqaatName}</li>
+                                <li><strong>Jamaat:</strong> {existingMiqaat.Jamaat}</li>
+                                <li><strong>Jamiyat:</strong> {existingMiqaat.Jamiyat}</li>
+                                <li><strong>From Date:</strong> {existingMiqaat.FromDate:yyyy-MM-dd}</li>
+                                <li><strong>Till Date:</strong> {existingMiqaat.TillDate:yyyy-MM-dd}</li>
+                                <li><strong>Volunteer Limit:</strong> {existingMiqaat.VolunteerLimit}</li>
+                                <li><strong>Captain:</strong> {existingMiqaat.CaptainName}</li>
+                                {(string.IsNullOrWhiteSpace(existingMiqaat.AboutMiqaat) ? "" : $"<li><strong>About:</strong> {existingMiqaat.AboutMiqaat}</li>")}
+                            </ul>
+                            <p>Status: <strong>{statusText}</strong></p>
+                        </body>
+                        </html>";
+
+                    await _emailService.SendBulkEmailAsync(emailList, subject, body);
+
+                    // If approved, also send email to all members from the same jamiyat
+                    if (parsedStatus == AdminApprovalStatus.Approved && !string.IsNullOrWhiteSpace(existingMiqaat.Jamaat))
+                    {
+                        var members = await _userRepository.GetMembersByJamaatAsync(existingMiqaat.Jamaat);
+                        var memberEmails = members
+                            .Where(m => !string.IsNullOrWhiteSpace(m.Email))
+                            .Select(m => m.Email)
+                            .ToList();
+
+                        // Add captain email to member list if not already included
+                        if (captain != null && !string.IsNullOrWhiteSpace(captain.Email) && !memberEmails.Contains(captain.Email))
+                        {
+                            memberEmails.Add(captain.Email);
+                        }
+
+                        if (memberEmails.Any())
+                        {
+                            var memberSubject = $"New Miqaat Approved: {existingMiqaat.MiqaatName}";
+                            var memberBody = $@"
+                                <html>
+                                <body>
+                                    <h2>New Miqaat Approved</h2>
+                                    <p>A new Miqaat has been approved and is now available for enrollment.</p>
+                                    <p><strong>Details:</strong></p>
+                                    <ul>
+                                        <li><strong>Miqaat Name:</strong> {existingMiqaat.MiqaatName}</li>
+                                        <li><strong>Jamaat:</strong> {existingMiqaat.Jamaat}</li>
+                                        <li><strong>Jamiyat:</strong> {existingMiqaat.Jamiyat}</li>
+                                        <li><strong>From Date:</strong> {existingMiqaat.FromDate:yyyy-MM-dd}</li>
+                                        <li><strong>Till Date:</strong> {existingMiqaat.TillDate:yyyy-MM-dd}</li>
+                                        <li><strong>Volunteer Limit:</strong> {existingMiqaat.VolunteerLimit}</li>
+                                        <li><strong>Captain:</strong> {existingMiqaat.CaptainName}</li>
+                                        {(string.IsNullOrWhiteSpace(existingMiqaat.AboutMiqaat) ? "" : $"<li><strong>About:</strong> {existingMiqaat.AboutMiqaat}</li>")}
+                                    </ul>
+                                    <p>Please check the app for enrollment details.</p>
+                                </body>
+                                </html>";
+
+                            await _emailService.SendBulkEmailAsync(memberEmails, memberSubject, memberBody);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error sending email notification for miqaat approval: {ex.Message}");
+            }
+        });
     }
 
     public async Task Delete(long id)
@@ -215,12 +390,15 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             m.FromDate,
             m.TillDate,
+            m.MiqaatDays,
             m.VolunteerLimit,
             m.AboutMiqaat,
             m.AdminApproval.ToString(),
             m.CaptainName,
             ConvertUtcToIst(m.CreatedAt),
-            ConvertUtcToIst(m.UpdatedAt)
+            ConvertUtcToIst(m.UpdatedAt),
+            m.MemberStatus,
+            m.FinalStatus
         )).ToList();
     }
 
@@ -234,12 +412,15 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             m.FromDate,
             m.TillDate,
+            m.MiqaatDays,
             m.VolunteerLimit,
             m.AboutMiqaat,
             m.AdminApproval.ToString(),
             m.CaptainName,
             ConvertUtcToIst(m.CreatedAt),
-            ConvertUtcToIst(m.UpdatedAt)
+            ConvertUtcToIst(m.UpdatedAt),
+            null,
+            null
         )).ToList();
     }
 
@@ -266,6 +447,66 @@ public class MiqaatService : IMiqaatService
         }
 
         await _miqaatMemberRepository.UpdateMemberMiqaatStatus(memberId, miqaatId, status);
+    }
+
+    public async Task<List<EnrolledMemberResponse>> GetEnrolledMembersByMiqaatId(long miqaatId)
+    {
+        var members = await _miqaatMemberRepository.GetEnrolledMembersByMiqaatId(miqaatId);
+        var finalStatuses = await _miqaatMemberRepository.GetFinalStatusesByMiqaatId(miqaatId);
+        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId);
+        
+        return members.Select(m => new EnrolledMemberResponse(
+            m.Id,
+            m.FullName,
+            m.Email,
+            m.Contact,
+            m.Rank,
+            m.Jamaat,
+            m.Jamiyat,
+            finalStatuses.GetValueOrDefault(m.Id),
+            m.ItsId,
+            attendanceStatuses.GetValueOrDefault(m.Id)
+        )).ToList();
+    }
+
+    public async Task<List<EnrolledMemberResponse>> GetApprovedMembersForAttendance(long miqaatId)
+    {
+        var members = await _miqaatMemberRepository.GetApprovedMembersForAttendance(miqaatId);
+        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId);
+        
+        return members.Select(m => new EnrolledMemberResponse(
+            m.Id,
+            m.FullName,
+            m.Email,
+            m.Contact,
+            m.Rank,
+            m.Jamaat,
+            m.Jamiyat,
+            "Approved", // All members from this method already have final_status = 'Approved'
+            m.ItsId,
+            attendanceStatuses.GetValueOrDefault(m.Id)
+        )).ToList();
+    }
+    
+    public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus)
+    {
+        // Validate final status
+        if (finalStatus != "Approved" && finalStatus != "Rejected")
+        {
+            throw new Exception("Invalid final status. Must be 'Approved' or 'Rejected'");
+        }
+
+        await _miqaatMemberRepository.UpdateFinalStatus(memberId, miqaatId, finalStatus);
+    }
+
+    public async Task MarkAttendanceBatch(long miqaatId, List<int> memberIds)
+    {
+        if (memberIds == null || !memberIds.Any())
+        {
+            throw new Exception("Member IDs list cannot be empty");
+        }
+
+        await _miqaatMemberRepository.MarkAttendanceBatch(miqaatId, memberIds);
     }
 
     private static AdminApprovalStatus ParseApprovalStatus(string status)

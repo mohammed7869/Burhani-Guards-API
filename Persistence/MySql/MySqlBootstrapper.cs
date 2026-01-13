@@ -231,6 +231,7 @@ public sealed class MySqlBootstrapper
                 `member_id` INT NOT NULL,
                 `miqaat_id` BIGINT NOT NULL,
                 `status` VARCHAR(50) NULL,
+                `final_status` VARCHAR(50) NULL,
                 PRIMARY KEY (`member_id`, `miqaat_id`),
                 INDEX `IX_miqaat_members_member_id` (`member_id`),
                 INDEX `IX_miqaat_members_miqaat_id` (`miqaat_id`),
@@ -238,6 +239,43 @@ public sealed class MySqlBootstrapper
                 CONSTRAINT `FK_miqaat_members_miqaat_id` FOREIGN KEY (`miqaat_id`) REFERENCES `local_miqaat` (`id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             """);
+        
+        // Add final_status column if it doesn't exist (for existing databases)
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                ALTER TABLE `miqaat_members` 
+                ADD COLUMN `final_status` VARCHAR(50) NULL;
+                """);
+        }
+        catch { } // Column might already exist
+
+        // Migration: Alter created_by column from INT to VARCHAR to store captain's name
+        try
+        {
+            // Check if created_by column exists and is INT type
+            var columnInfo = await dbConnection.QueryFirstOrDefaultAsync<dynamic>("""
+                SELECT DATA_TYPE, COLUMN_TYPE 
+                FROM information_schema.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'members' 
+                AND COLUMN_NAME = 'created_by'
+                """);
+            
+            if (columnInfo != null)
+            {
+                var dataType = columnInfo.DATA_TYPE?.ToString() ?? "";
+                // If it's an integer type, alter it to VARCHAR
+                if (dataType.ToUpper().Contains("INT"))
+                {
+                    await dbConnection.ExecuteAsync("""
+                        ALTER TABLE `members` 
+                        MODIFY COLUMN `created_by` VARCHAR(255) NULL;
+                        """);
+                }
+            }
+        }
+        catch { } // Migration might fail, column might not exist or already be correct type
 
         // Seed default captain if not exists
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(CaptainDefaults.Password);

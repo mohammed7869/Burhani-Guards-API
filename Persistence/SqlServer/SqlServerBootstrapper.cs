@@ -183,6 +183,7 @@ public sealed class SqlServerBootstrapper
                     [member_id] INT NOT NULL,
                     [miqaat_id] BIGINT NOT NULL,
                     [status] NVARCHAR(50) NULL,
+                    [final_status] NVARCHAR(50) NULL,
                     PRIMARY KEY ([member_id], [miqaat_id])
                 );
                 CREATE INDEX IX_miqaat_members_member_id ON [dbo].[miqaat_members]([member_id]);
@@ -200,7 +201,39 @@ public sealed class SqlServerBootstrapper
                     ADD CONSTRAINT FK_miqaat_members_miqaat_id FOREIGN KEY ([miqaat_id]) REFERENCES [dbo].[local_miqaat]([id]) ON DELETE CASCADE;
                 END
             END
+            
+            -- Add final_status column if it doesn't exist (for existing databases)
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[miqaat_members]') AND name = 'final_status')
+            BEGIN
+                ALTER TABLE [dbo].[miqaat_members]
+                ADD [final_status] NVARCHAR(50) NULL;
+            END
             """);
+
+        // Migration: Alter created_by column from INT to NVARCHAR to store captain's name
+        try
+        {
+            await connection.ExecuteAsync("""
+                IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND type in (N'U'))
+                BEGIN
+                    IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND name = 'created_by')
+                    BEGIN
+                        -- Check if column is INT type and alter to NVARCHAR
+                        DECLARE @DataType NVARCHAR(128);
+                        SELECT @DataType = TYPE_NAME(system_type_id)
+                        FROM sys.columns
+                        WHERE object_id = OBJECT_ID(N'[dbo].[members]') AND name = 'created_by';
+                        
+                        IF @DataType LIKE '%int%'
+                        BEGIN
+                            ALTER TABLE [dbo].[members]
+                            ALTER COLUMN [created_by] NVARCHAR(255) NULL;
+                        END
+                    END
+                END
+                """);
+        }
+        catch { } // Migration might fail, column might not exist or already be correct type
 
         // Seed default captain if not exists
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(CaptainDefaults.Password);

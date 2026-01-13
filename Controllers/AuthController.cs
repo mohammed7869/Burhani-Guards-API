@@ -49,7 +49,7 @@ public class AuthController : BaseController
             return BadRequest(new { message = "Invalid ITS Number or password" });
         }
 
-        var token = _tokenService.GenerateToken(user.itsId ?? user.email, GetRoleFromRank(user.rank, user.roles));
+        var token = _tokenService.GenerateToken(user.itsId ?? user.email ?? string.Empty, GetRoleFromRank(user.rank, user.roles));
         var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
         var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
         
@@ -117,7 +117,7 @@ public class AuthController : BaseController
                 return BadRequest(new { message = "Access denied. Only Resource Admin can login to the Admin Panel." });
             }
 
-            var token = _tokenService.GenerateToken(user.email ?? user.itsId, GetRoleFromRank(user.rank, user.roles));
+            var token = _tokenService.GenerateToken(user.email ?? user.itsId ?? string.Empty, GetRoleFromRank(user.rank, user.roles));
             var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
             var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
             
@@ -191,7 +191,7 @@ public class AuthController : BaseController
                 return BadRequest(new { message = "Access denied. Only Resource Admin can login to the Admin Panel." });
             }
 
-            var token = _tokenService.GenerateToken(user.email ?? user.itsId, GetRoleFromRank(user.rank, user.roles));
+            var token = _tokenService.GenerateToken(user.email ?? user.itsId ?? string.Empty, GetRoleFromRank(user.rank, user.roles));
             var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
             var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
             

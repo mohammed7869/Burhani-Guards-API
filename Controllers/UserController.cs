@@ -73,6 +73,38 @@ public class UserController : BaseController
         }
     }
 
+    [HttpPut("{id}/approve")]
+    public async Task<IActionResult> ApproveMember(int id)
+    {
+        try
+        {
+            await _userService.ApproveMember(id);
+            return Ok(new { message = "Member approved successfully" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("jamaat/{jamaat}")]
+    public async Task<IActionResult> GetMembersByJamaat(string jamaat)
+    {
+        try
+        {
+            var members = await _userService.GetMembersByJamaatAsync(jamaat);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{id}/upload-profile")]
     public async Task<IActionResult> UploadProfileImage(int id, IFormFile file)
     {
@@ -103,9 +135,16 @@ public class UserController : BaseController
                 Directory.CreateDirectory(UploadPath);
             }
 
+            // Ensure profile subdirectory exists
+            var profilePath = Path.Combine(UploadPath, "profile");
+            if (!Directory.Exists(profilePath))
+            {
+                Directory.CreateDirectory(profilePath);
+            }
+
             // Generate unique filename
             var fileName = $"user_{id}_{DateTime.UtcNow:yyyyMMddHHmmss}{fileExtension}";
-            var filePath = Path.Combine(UploadPath, fileName);
+            var filePath = Path.Combine(profilePath, fileName);
 
             // Save file
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -114,7 +153,7 @@ public class UserController : BaseController
             }
 
             // Relative path for database storage
-            var relativePath = $"bgp_uploads/{fileName}";
+            var relativePath = $"bgp_uploads/profile/{fileName}";
 
             // Update user profile in database
             await _userService.UpdateProfileImage(id, relativePath);

@@ -183,5 +183,105 @@ public class MiqaatController : BaseController
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpGet("{miqaatId}/enrolled-members")]
+    public async Task<IActionResult> GetEnrolledMembers(long miqaatId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can view enrolled members
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can view enrolled members");
+        }
+
+        try
+        {
+            var members = await _miqaatService.GetEnrolledMembersByMiqaatId(miqaatId);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{miqaatId}/approved-members-for-attendance")]
+    public async Task<IActionResult> GetApprovedMembersForAttendance(long miqaatId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can view approved members for attendance
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can view approved members for attendance");
+        }
+
+        try
+        {
+            var members = await _miqaatService.GetApprovedMembersForAttendance(miqaatId);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPatch("{miqaatId}/member/{memberId}/final-status")]
+    public async Task<IActionResult> UpdateFinalStatus(long miqaatId, int memberId, [FromBody] UpdateMemberMiqaatStatusRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can update final status
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can update final status");
+        }
+
+        try
+        {
+            await _miqaatService.UpdateFinalStatus(memberId, miqaatId, request.Status);
+            return Ok(new { message = "Final status updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{miqaatId}/mark-attendance")]
+    public async Task<IActionResult> MarkAttendance(long miqaatId, [FromBody] MarkAttendanceRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can mark attendance
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can mark attendance");
+        }
+
+        try
+        {
+            await _miqaatService.MarkAttendanceBatch(miqaatId, request.MemberIds);
+            return Ok(new { message = "Attendance marked successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }
 

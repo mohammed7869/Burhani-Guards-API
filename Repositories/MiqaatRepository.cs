@@ -19,9 +19,9 @@ public class MiqaatRepository : IMiqaatRepository
         {
             var sql = @"
                 INSERT INTO `local_miqaat` 
-                (`miqaat_name`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `created_at`, `updated_at`)
+                (`miqaat_name`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `created_at`, `updated_at`)
                 VALUES 
-                (@MiqaatName, @Jamaat, @Jamiyat, @FromDate, @TillDate, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @CreatedAt, @UpdatedAt);
+                (@MiqaatName, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @CreatedAt, @UpdatedAt);
                 SELECT LAST_INSERT_ID();";
 
             var id = await connection.QuerySingleAsync<long>(sql, new
@@ -31,6 +31,7 @@ public class MiqaatRepository : IMiqaatRepository
                 model.Jamiyat,
                 FromDate = model.FromDate.Date,
                 TillDate = model.TillDate.Date,
+                model.MiqaatDays,
                 model.VolunteerLimit,
                 model.AboutMiqaat,
                 AdminApproval = model.AdminApproval.ToString(),
@@ -55,6 +56,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `jamiyat` AS Jamiyat,
                     `from_date` AS FromDate,
                     `till_date` AS TillDate,
+                    IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays,
                     `volunteer_limit` AS VolunteerLimit,
                     `about_miqaat` AS AboutMiqaat,
                     `admin_approval` AS AdminApproval,
@@ -81,6 +83,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `jamiyat` AS Jamiyat,
                     `from_date` AS FromDate,
                     `till_date` AS TillDate,
+                    IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays,
                     `volunteer_limit` AS VolunteerLimit,
                     `about_miqaat` AS AboutMiqaat,
                     `admin_approval` AS AdminApproval,
@@ -107,6 +110,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `jamiyat` = @Jamiyat,
                     `from_date` = @FromDate,
                     `till_date` = @TillDate,
+                    `miqaat_days` = @MiqaatDays,
                     `volunteer_limit` = @VolunteerLimit,
                     `about_miqaat` = @AboutMiqaat,
                     `admin_approval` = @AdminApproval,
@@ -122,6 +126,7 @@ public class MiqaatRepository : IMiqaatRepository
                 model.Jamiyat,
                 FromDate = model.FromDate.Date,
                 TillDate = model.TillDate.Date,
+                model.MiqaatDays,
                 model.VolunteerLimit,
                 model.AboutMiqaat,
                 AdminApproval = model.AdminApproval.ToString(),
@@ -152,6 +157,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `jamiyat` AS Jamiyat,
                     `from_date` AS FromDate,
                     `till_date` AS TillDate,
+                    IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays,
                     `volunteer_limit` AS VolunteerLimit,
                     `about_miqaat` AS AboutMiqaat,
                     `admin_approval` AS AdminApproval,

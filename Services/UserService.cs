@@ -22,22 +22,53 @@ public interface IUserService
     Task<bool> ChangePassword(ChangePasswordRequest viewmodel);
     Task UpdateProfileImage(int id, string profilePath);
     Task<JamiyatJamaatResponse> GetJamiyatJamaatWithCounts();
+    Task ApproveMember(int id);
+    Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat);
 }
 
 public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IEmailService _emailService;
     private CurrentUserViewModel? GetCurrentUser() => _httpContextAccessor.HttpContext?.Items["User"] as CurrentUserViewModel;
 
-    public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
+    public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, IEmailService emailService)
     {
         _userRepository = userRepository;
         _httpContextAccessor = httpContextAccessor;
+        _emailService = emailService;
     }
 
     public async Task<int> Add(UserCreateViewModel viewmodel)
     {
+        var currentUser = GetCurrentUser();
+        
+        // Determine is_approved based on current user role
+        // If current user is Admin (ResourceAdmin = 7), set is_approved = true
+        // If current user is Captain (Captain = 2), set is_approved = false
+        // Default to true if no current user (shouldn't happen in production)
+        bool isApproved = true;
+        if (currentUser != null)
+        {
+            // If current user is Captain (roles = 2), member needs approval
+            if (currentUser.roles == MemberRank.Captain)
+            {
+                isApproved = false;
+            }
+            // If current user is Admin (roles = 7), member is auto-approved
+            else if (currentUser.roles == MemberRank.ResourceAdmin)
+            {
+                isApproved = true;
+            }
+        }
+        
+        // Override with explicit value if provided
+        if (viewmodel.isApproved.HasValue)
+        {
+            isApproved = viewmodel.isApproved.Value;
+        }
+
         var user = new UserModel
         {
             ItsId = viewmodel.itsId,
@@ -53,7 +84,9 @@ public class UserService : IUserService
             PasswordHash = !string.IsNullOrWhiteSpace(viewmodel.password) 
                 ? BCrypt.Net.BCrypt.HashPassword(viewmodel.password) 
                 : null,
-            IsActive = true
+            IsActive = true,
+            IsApproved = isApproved,
+            CreatedBy = currentUser?.fullName
         };
 
         return await _userRepository.Add(user);
@@ -248,6 +281,37 @@ public class UserService : IUserService
 
             await _userRepository.UpdatePassword(user);
             System.Diagnostics.Debug.WriteLine($"ChangePassword: Successfully updated password for ITS ID: {itsId}");
+
+            // Send congratulatory email to the user
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                try
+                {
+                    var subject = "Password Changed Successfully";
+                    var body = $@"
+                        <html>
+                        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+                            <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
+                                <h2 style='color: #28a745;'>Congratulations!</h2>
+                                <p>Dear {user.FullName},</p>
+                                <p>We are pleased to inform you that your password has been changed successfully.</p>
+                                <p>Your new password has been set and is now active. You can now login to your account using your new Password</p>
+                                <p>If you did not make this change, please contact us immediately.</p>
+                                <p style='margin-top: 30px;'>Best regards,<br>Burhani Guards Pune Team</p>
+                            </div>
+                        </body>
+                        </html>";
+
+                    await _emailService.SendEmailAsync(user.Email, subject, body);
+                    System.Diagnostics.Debug.WriteLine($"ChangePassword: Successfully sent email notification to {user.Email}");
+                }
+                catch (Exception emailEx)
+                {
+                    // Log email error but don't fail the password change
+                    System.Diagnostics.Debug.WriteLine($"ChangePassword: Failed to send email notification: {emailEx.Message}");
+                }
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -275,6 +339,24 @@ public class UserService : IUserService
         return new JamiyatJamaatResponse(jamiyats, jamaats);
     }
 
+    public async Task ApproveMember(int id)
+    {
+        var currentUser = GetCurrentUser();
+        
+        // Only ResourceAdmin (Admin) can approve members
+        if (currentUser == null || currentUser.roles != MemberRank.ResourceAdmin)
+        {
+            throw new UnauthorizedAccessException("Only Admin can approve members");
+        }
+
+        await _userRepository.ApproveMember(id);
+    }
+
+    public async Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat)
+    {
+        return await _userRepository.GetMembersByJamaatAsync(jamaat);
+    }
+
     private UserViewModel MapToViewModel(UserModel user)
     {
         return new UserViewModel
@@ -294,6 +376,7 @@ public class UserService : IUserService
             passwordHash = user.PasswordHash,
             newPasswordHash = user.NewPasswordHash,
             isActive = user.IsActive,
+            isApproved = user.IsApproved,
             createdAt = user.CreatedAt,
             updatedAt = user.UpdatedAt
         };

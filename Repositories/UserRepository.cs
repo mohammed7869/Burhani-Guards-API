@@ -20,6 +20,11 @@ public interface IUserRepository
     Task UpdatePassword(UserModel model);
     Task UpdateProfileImage(UserModel model);
     Task<(List<JamiyatItem> Jamiyats, List<JamaatItem> Jamaats)> GetJamiyatJamaatWithCounts();
+    Task<List<string>> GetAdminEmailsAsync();
+    Task<List<MemberModel>> GetMembersByJamiyatAsync(string jamiyat);
+    Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat);
+    Task<MemberModel?> GetCaptainByFullNameAsync(string captainName);
+    Task ApproveMember(int id);
 }
 
 public class UserRepository : IUserRepository
@@ -59,7 +64,45 @@ public class UserRepository : IUserRepository
                 throw new Exception("Email already registered. Please try with another email");
             }
 
-            var id = await connection.InsertAsync(viewmodel);
+            // Use explicit SQL INSERT with snake_case column names
+            var insertSql = @"
+                INSERT INTO `members` 
+                (
+                    `its_id`, `full_name`, `email`, `rank`, `roles`, 
+                    `jamiyat`, `jamaat`, `jamiyat_id`, `jamaat_id`, 
+                    `gender`, `age`, `contact`, `password_hash`, 
+                    `is_active`, `is_approved`, `created_by`, `created_at`, `updated_at`
+                )
+                VALUES 
+                (
+                    @ItsId, @FullName, @Email, @Rank, @Roles,
+                    @Jamiyat, @Jamaat, @JamiyatId, @JamaatId,
+                    @Gender, @Age, @Contact, @PasswordHash,
+                    @IsActive, @IsApproved, @CreatedBy, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                );
+                SELECT LAST_INSERT_ID();
+            ";
+
+            var id = await connection.QuerySingleAsync<int>(insertSql, new
+            {
+                ItsId = viewmodel.ItsId,
+                FullName = viewmodel.FullName,
+                Email = viewmodel.Email,
+                Rank = viewmodel.Rank,
+                Roles = viewmodel.Roles,
+                Jamiyat = viewmodel.Jamiyat,
+                Jamaat = viewmodel.Jamaat,
+                JamiyatId = viewmodel.JamiyatId,
+                JamaatId = viewmodel.JamaatId,
+                Gender = viewmodel.Gender,
+                Age = viewmodel.Age,
+                Contact = viewmodel.Contact,
+                PasswordHash = viewmodel.PasswordHash,
+                IsActive = viewmodel.IsActive,
+                IsApproved = viewmodel.IsApproved,
+                CreatedBy = viewmodel.CreatedBy
+            });
+
             return id;
         }
     }
@@ -177,6 +220,7 @@ public class UserRepository : IUserRepository
                 u.`age`,
                 u.`contact`,
                 u.`is_active` AS isActive,
+                u.`is_approved` AS isApproved,
                 u.`created_at` AS createdAt,
                 u.`updated_at` AS updatedAt
             FROM `members` u
@@ -215,6 +259,7 @@ public class UserRepository : IUserRepository
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
+                    `is_approved` AS IsApproved,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `members` 
@@ -305,6 +350,7 @@ public class UserRepository : IUserRepository
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
+                    `is_approved` AS IsApproved,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `members` 
@@ -341,6 +387,7 @@ public class UserRepository : IUserRepository
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
+                    `is_approved` AS IsApproved,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `members` 
@@ -439,6 +486,215 @@ public class UserRepository : IUserRepository
             var jamaatList = jamaatResults.Select(x => new JamaatItem(x.Name, (int)x.Count)).ToList();
 
             return (jamiyatList, jamaatList);
+        }
+    }
+
+    public async Task<List<string>> GetAdminEmailsAsync()
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            // Get all admin emails (users with roles = 3 or rank = 'Admin')
+            var sql = @"
+                SELECT DISTINCT `email`
+                FROM `members`
+                WHERE (`roles` = 7 OR `rank` = 'Admin')
+                    AND `is_active` = 1
+                    AND `email` IS NOT NULL
+                    AND `email` != ''
+            ";
+
+            var emails = await connection.QueryAsync<string>(sql);
+            return emails.Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+        }
+    }
+
+    public async Task<List<MemberModel>> GetMembersByJamiyatAsync(string jamiyat)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS `Rank`,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `is_active` AS IsActive,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `members`
+                WHERE `jamiyat` = @Jamiyat
+                    AND `is_active` = 1
+                    AND `email` IS NOT NULL
+                    AND `email` != ''
+            ";
+
+            var members = await connection.QueryAsync(sql, new { Jamiyat = jamiyat });
+            return members.Select(row => new MemberModel
+            {
+                Id = (long)row.Id,
+                Profile = row.Profile as string,
+                ItsId = row.ItsId as string ?? string.Empty,
+                Rank = row.Rank as string ?? string.Empty,
+                Roles = row.Roles as int?,
+                Jamiyat = row.Jamiyat as string,
+                Jamaat = row.Jamaat as string,
+                JamiyatId = row.JamiyatId as int?,
+                JamaatId = row.JamaatId as int?,
+                FullName = row.FullName as string ?? string.Empty,
+                Gender = row.Gender as string,
+                Email = row.Email as string ?? string.Empty,
+                Age = row.Age as int?,
+                Contact = row.Contact as string,
+                IsActive = row.IsActive as bool? ?? true,
+                CreatedAt = row.CreatedAt as DateTime? ?? DateTime.UtcNow,
+                UpdatedAt = row.UpdatedAt as DateTime? ?? DateTime.UtcNow
+            }).ToList();
+        }
+    }
+
+    public async Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS `Rank`,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `is_active` AS IsActive,
+                    `is_approved` AS IsApproved,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `members`
+                WHERE `jamaat` = @Jamaat
+                    AND `is_active` = 1
+                    AND `email` IS NOT NULL
+                    AND `email` != ''
+                ORDER BY `full_name` ASC
+            ";
+
+            var members = await connection.QueryAsync(sql, new { Jamaat = jamaat });
+            return members.Select(row => new MemberModel
+            {
+                Id = (long)row.Id,
+                Profile = row.Profile as string,
+                ItsId = row.ItsId as string ?? string.Empty,
+                Rank = row.Rank as string ?? string.Empty,
+                Roles = row.Roles as int?,
+                Jamiyat = row.Jamiyat as string,
+                Jamaat = row.Jamaat as string,
+                JamiyatId = row.JamiyatId as int?,
+                JamaatId = row.JamaatId as int?,
+                FullName = row.FullName as string ?? string.Empty,
+                Gender = row.Gender as string,
+                Email = row.Email as string ?? string.Empty,
+                Age = row.Age as int?,
+                Contact = row.Contact as string,
+                IsActive = row.IsActive as bool? ?? true,
+                IsApproved = row.IsApproved as bool? ?? true,
+                CreatedAt = row.CreatedAt as DateTime? ?? DateTime.UtcNow,
+                UpdatedAt = row.UpdatedAt as DateTime? ?? DateTime.UtcNow
+            }).ToList();
+        }
+    }
+
+    public async Task<MemberModel?> GetCaptainByFullNameAsync(string captainName)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS `Rank`,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `is_active` AS IsActive,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `members`
+                WHERE `full_name` = @CaptainName
+                    AND `rank` = 'Captain'
+                    AND `is_active` = 1
+                LIMIT 1
+            ";
+
+            var row = await connection.QueryFirstOrDefaultAsync(sql, new { CaptainName = captainName });
+            if (row == null)
+            {
+                return null;
+            }
+
+            return new MemberModel
+            {
+                Id = (long)row.Id,
+                Profile = row.Profile as string,
+                ItsId = row.ItsId as string ?? string.Empty,
+                Rank = row.Rank as string ?? string.Empty,
+                Roles = row.Roles as int?,
+                Jamiyat = row.Jamiyat as string,
+                Jamaat = row.Jamaat as string,
+                JamiyatId = row.JamiyatId as int?,
+                JamaatId = row.JamaatId as int?,
+                FullName = row.FullName as string ?? string.Empty,
+                Gender = row.Gender as string,
+                Email = row.Email as string ?? string.Empty,
+                Age = row.Age as int?,
+                Contact = row.Contact as string,
+                IsActive = row.IsActive as bool? ?? true,
+                CreatedAt = row.CreatedAt as DateTime? ?? DateTime.UtcNow,
+                UpdatedAt = row.UpdatedAt as DateTime? ?? DateTime.UtcNow
+            };
+        }
+    }
+
+    public async Task ApproveMember(int id)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                UPDATE `members` 
+                SET `is_approved` = 1, 
+                    `updated_at` = CURRENT_TIMESTAMP
+                WHERE `id` = @Id AND `is_active` = 1
+            ";
+
+            var rowsAffected = await connection.ExecuteAsync(sql, new { Id = id });
+
+            if (rowsAffected == 0)
+            {
+                throw new Exception("Member not found or inactive");
+            }
         }
     }
 }

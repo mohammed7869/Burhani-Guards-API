@@ -22,6 +22,7 @@ public class UserViewModel
     public string? passwordHash { get; set; }
     public string? newPasswordHash { get; set; }
     public bool isActive { get; set; } = true;
+    public bool isApproved { get; set; } = true;
     public DateTime createdAt { get; set; }
     public DateTime updatedAt { get; set; }
 }
@@ -43,6 +44,7 @@ public class UserListViewModel
     public int? age { get; set; }
     public string? contact { get; set; }
     public bool isActive { get; set; }
+    public bool isApproved { get; set; }
     public DateTime createdAt { get; set; }
     public DateTime updatedAt { get; set; }
 }
@@ -71,6 +73,7 @@ public class UserCreateViewModel
     public int? age { get; set; }
     public string? contact { get; set; }
     public string? password { get; set; }
+    public bool? isApproved { get; set; }
 }
 
 public class UserEditViewModel

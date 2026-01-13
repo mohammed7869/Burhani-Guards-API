@@ -7,11 +7,14 @@ public sealed record MiqaatResponse(
     string Jamiyat,
     DateTime FromDate,
     DateTime TillDate,
+    int MiqaatDays,
     int VolunteerLimit,
     string? AboutMiqaat,
     string AdminApproval,
     string CaptainName,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? Status,
+    string? FinalStatus
 );
 
