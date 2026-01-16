@@ -182,12 +182,15 @@ public sealed class SqlServerBootstrapper
                 CREATE TABLE [dbo].[miqaat_members] (
                     [member_id] INT NOT NULL,
                     [miqaat_id] BIGINT NOT NULL,
+                    [miqaat_day] INT NOT NULL CONSTRAINT DF_miqaat_members_miqaat_day DEFAULT 1,
                     [status] NVARCHAR(50) NULL,
                     [final_status] NVARCHAR(50) NULL,
-                    PRIMARY KEY ([member_id], [miqaat_id])
+                    [is_attended] BIT NOT NULL CONSTRAINT DF_miqaat_members_is_attended DEFAULT 0,
+                    PRIMARY KEY ([member_id], [miqaat_id], [miqaat_day])
                 );
                 CREATE INDEX IX_miqaat_members_member_id ON [dbo].[miqaat_members]([member_id]);
                 CREATE INDEX IX_miqaat_members_miqaat_id ON [dbo].[miqaat_members]([miqaat_id]);
+                CREATE INDEX IX_miqaat_members_miqaat_id_day ON [dbo].[miqaat_members]([miqaat_id], [miqaat_day]);
                 
                 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_miqaat_members_member_id')
                 BEGIN
@@ -207,6 +210,20 @@ public sealed class SqlServerBootstrapper
             BEGIN
                 ALTER TABLE [dbo].[miqaat_members]
                 ADD [final_status] NVARCHAR(50) NULL;
+            END
+
+            -- Add miqaat_day column if it doesn't exist (for existing databases)
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[miqaat_members]') AND name = 'miqaat_day')
+            BEGIN
+                ALTER TABLE [dbo].[miqaat_members]
+                ADD [miqaat_day] INT NOT NULL CONSTRAINT DF_miqaat_members_miqaat_day DEFAULT 1;
+            END
+
+            -- Add is_attended column if it doesn't exist (for existing databases)
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[miqaat_members]') AND name = 'is_attended')
+            BEGIN
+                ALTER TABLE [dbo].[miqaat_members]
+                ADD [is_attended] BIT NOT NULL CONSTRAINT DF_miqaat_members_is_attended DEFAULT 0;
             END
             """);
 

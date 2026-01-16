@@ -10,11 +10,11 @@ public interface IMiqaatMemberRepository
     Task<List<MiqaatModel>> GetMiqaatsByMemberId(int memberId);
     Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status);
     Task<List<MemberModel>> GetEnrolledMembersByMiqaatId(long miqaatId);
-    Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId);
+    Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task<Dictionary<long, string?>> GetFinalStatusesByMiqaatId(long miqaatId);
-    Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId);
+    Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
-    Task MarkAttendanceBatch(long miqaatId, List<int> memberIds);
+    Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
 }
 
 public class MiqaatMemberRepository : IMiqaatMemberRepository
@@ -30,6 +30,19 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
     {
         using var connection = _context.CreateConnection();
 
+        // Determine miqaat duration (inclusive) so we can create one row per day
+        const string miqaatDaysSql = """
+            SELECT IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays
+            FROM `local_miqaat`
+            WHERE `id` = @MiqaatId
+        """;
+
+        var miqaatDays = await connection.QueryFirstOrDefaultAsync<int>(miqaatDaysSql, new { MiqaatId = miqaatId });
+        if (miqaatDays < 1)
+        {
+            miqaatDays = 1;
+        }
+
         const string memberQuery = """
             SELECT id 
             FROM `members` 
@@ -43,17 +56,19 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         }
 
         const string insertSql = """
-            INSERT INTO `miqaat_members` (`member_id`, `miqaat_id`, `status`)
-            VALUES (@MemberId, @MiqaatId, @Status)
+            INSERT INTO `miqaat_members` (`member_id`, `miqaat_id`, `miqaat_day`, `status`)
+            VALUES (@MemberId, @MiqaatId, @Day, @Status)
             ON DUPLICATE KEY UPDATE `status` = VALUES(`status`);
         """;
 
-        var parameters = memberIds.Select(id => new
-        {
-            MemberId = id,
-            MiqaatId = miqaatId,
-            Status = status.ToString()
-        });
+        var parameters = memberIds
+            .SelectMany(id => Enumerable.Range(1, miqaatDays).Select(day => new
+            {
+                MemberId = id,
+                MiqaatId = miqaatId,
+                Day = day,
+                Status = status.ToString()
+            }));
 
         await connection.ExecuteAsync(insertSql, parameters);
     }
@@ -82,6 +97,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             FROM `local_miqaat` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`miqaat_id`
             WHERE mm.`member_id` = @MemberId
+                AND mm.`miqaat_day` = 1
                 AND m.`admin_approval` = 'Approved'
             ORDER BY m.`created_at` DESC
         """;
@@ -147,11 +163,19 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
         var members = new List<MemberModel>();
         
+        // Deduplicate because miqaat_members can have multiple rows per member (one per day)
+        var seen = new HashSet<long>();
         foreach (var row in result)
         {
+            var id = (long)row.Id;
+            if (!seen.Add(id))
+            {
+                continue;
+            }
+
             var member = new MemberModel
             {
-                Id = (long)row.Id,
+                Id = id,
                 Profile = row.Profile as string,
                 ItsId = row.ItsId as string ?? string.Empty,
                 Rank = row.Rank as string ?? string.Empty,
@@ -175,7 +199,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         return members;
     }
 
-    public async Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId)
+    public async Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day)
     {
         using var connection = _context.CreateConnection();
 
@@ -201,13 +225,14 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             FROM `members` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
             WHERE mm.`miqaat_id` = @MiqaatId 
+                AND mm.`miqaat_day` = @Day
                 AND mm.`status` = 'Approved'
                 AND mm.`final_status` = 'Approved'
                 AND m.`is_active` = 1
             ORDER BY m.`full_name` ASC
         """;
 
-        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
+        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId, Day = day });
         var members = new List<MemberModel>();
         
         foreach (var row in result)
@@ -246,13 +271,14 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             SELECT `member_id`, `final_status`
             FROM `miqaat_members`
             WHERE `miqaat_id` = @MiqaatId
+                AND `miqaat_day` = 1
         """;
 
         var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
         return result.ToDictionary(r => (long)r.member_id, r => r.final_status as string);
     }
 
-    public async Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId)
+    public async Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day)
     {
         using var connection = _context.CreateConnection();
 
@@ -260,9 +286,10 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             SELECT `member_id`, `is_attended`
             FROM `miqaat_members`
             WHERE `miqaat_id` = @MiqaatId
+                AND `miqaat_day` = @Day
         """;
 
-        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
+        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId, Day = day });
         var attendanceDict = new Dictionary<long, bool>();
         
         foreach (var row in result)
@@ -297,7 +324,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         return attendanceDict;
     }
 
-    public async Task MarkAttendanceBatch(long miqaatId, List<int> memberIds)
+    public async Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds)
     {
         using var connection = _context.CreateConnection();
 
@@ -305,12 +332,14 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             UPDATE `miqaat_members`
             SET `is_attended` = 1
             WHERE `miqaat_id` = @MiqaatId 
+                AND `miqaat_day` = @Day
                 AND `member_id` IN @MemberIds
         """;
 
         var rowsAffected = await connection.ExecuteAsync(updateSql, new 
         { 
             MiqaatId = miqaatId,
+            Day = day,
             MemberIds = memberIds
         });
 

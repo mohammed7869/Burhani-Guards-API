@@ -230,11 +230,14 @@ public sealed class MySqlBootstrapper
             CREATE TABLE IF NOT EXISTS `miqaat_members` (
                 `member_id` INT NOT NULL,
                 `miqaat_id` BIGINT NOT NULL,
+                `miqaat_day` INT NOT NULL DEFAULT 1,
                 `status` VARCHAR(50) NULL,
                 `final_status` VARCHAR(50) NULL,
-                PRIMARY KEY (`member_id`, `miqaat_id`),
+                `is_attended` TINYINT(1) NOT NULL DEFAULT 0,
+                PRIMARY KEY (`member_id`, `miqaat_id`, `miqaat_day`),
                 INDEX `IX_miqaat_members_member_id` (`member_id`),
                 INDEX `IX_miqaat_members_miqaat_id` (`miqaat_id`),
+                INDEX `IX_miqaat_members_miqaat_id_day` (`miqaat_id`, `miqaat_day`),
                 CONSTRAINT `FK_miqaat_members_member_id` FOREIGN KEY (`member_id`) REFERENCES `members` (`id`) ON DELETE CASCADE,
                 CONSTRAINT `FK_miqaat_members_miqaat_id` FOREIGN KEY (`miqaat_id`) REFERENCES `local_miqaat` (`id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -249,6 +252,29 @@ public sealed class MySqlBootstrapper
                 """);
         }
         catch { } // Column might already exist
+
+        // Migration: Add miqaat_day column if it doesn't exist
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                ALTER TABLE `miqaat_members`
+                ADD COLUMN `miqaat_day` INT NOT NULL DEFAULT 1 AFTER `miqaat_id`;
+                """);
+        }
+        catch { } // Column might already exist
+
+        // Migration: Add is_attended column if it doesn't exist
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                ALTER TABLE `miqaat_members`
+                ADD COLUMN `is_attended` TINYINT(1) NOT NULL DEFAULT 0;
+                """);
+        }
+        catch { } // Column might already exist
+
+        // Note: Changing primary keys on existing DBs is intentionally not automated here.
+        // Use MIGRATION_ADD_MIQaat_MEMBER_DAY.sql to update the primary key to (member_id, miqaat_id, miqaat_day).
 
         // Migration: Alter created_by column from INT to VARCHAR to store captain's name
         try

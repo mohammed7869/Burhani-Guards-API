@@ -210,7 +210,7 @@ public class MiqaatController : BaseController
     }
 
     [HttpGet("{miqaatId}/approved-members-for-attendance")]
-    public async Task<IActionResult> GetApprovedMembersForAttendance(long miqaatId)
+    public async Task<IActionResult> GetApprovedMembersForAttendance(long miqaatId, [FromQuery] int day = 1)
     {
         if (CurrentUser == null)
         {
@@ -225,7 +225,7 @@ public class MiqaatController : BaseController
 
         try
         {
-            var members = await _miqaatService.GetApprovedMembersForAttendance(miqaatId);
+            var members = await _miqaatService.GetApprovedMembersForAttendance(miqaatId, day);
             return Ok(members);
         }
         catch (Exception ex)
@@ -275,7 +275,7 @@ public class MiqaatController : BaseController
 
         try
         {
-            await _miqaatService.MarkAttendanceBatch(miqaatId, request.MemberIds);
+            await _miqaatService.MarkAttendanceBatch(miqaatId, request.Day, request.MemberIds);
             return Ok(new { message = "Attendance marked successfully" });
         }
         catch (Exception ex)

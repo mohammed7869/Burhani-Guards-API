@@ -453,7 +453,8 @@ public class MiqaatService : IMiqaatService
     {
         var members = await _miqaatMemberRepository.GetEnrolledMembersByMiqaatId(miqaatId);
         var finalStatuses = await _miqaatMemberRepository.GetFinalStatusesByMiqaatId(miqaatId);
-        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId);
+        // Defaulting to day 1 for enrolled-members list (this endpoint is not day-specific)
+        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId, 1);
         
         return members.Select(m => new EnrolledMemberResponse(
             m.Id,
@@ -469,10 +470,25 @@ public class MiqaatService : IMiqaatService
         )).ToList();
     }
 
-    public async Task<List<EnrolledMemberResponse>> GetApprovedMembersForAttendance(long miqaatId)
+    public async Task<List<EnrolledMemberResponse>> GetApprovedMembersForAttendance(long miqaatId, int day)
     {
-        var members = await _miqaatMemberRepository.GetApprovedMembersForAttendance(miqaatId);
-        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId);
+        if (day < 1)
+        {
+            throw new Exception("Day must be >= 1");
+        }
+
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            throw new Exception("Miqaat not found");
+        }
+        if (day > miqaat.MiqaatDays)
+        {
+            throw new Exception($"Day must be between 1 and {miqaat.MiqaatDays}");
+        }
+
+        var members = await _miqaatMemberRepository.GetApprovedMembersForAttendance(miqaatId, day);
+        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId, day);
         
         return members.Select(m => new EnrolledMemberResponse(
             m.Id,
@@ -499,14 +515,29 @@ public class MiqaatService : IMiqaatService
         await _miqaatMemberRepository.UpdateFinalStatus(memberId, miqaatId, finalStatus);
     }
 
-    public async Task MarkAttendanceBatch(long miqaatId, List<int> memberIds)
+    public async Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds)
     {
         if (memberIds == null || !memberIds.Any())
         {
             throw new Exception("Member IDs list cannot be empty");
         }
 
-        await _miqaatMemberRepository.MarkAttendanceBatch(miqaatId, memberIds);
+        if (day < 1)
+        {
+            throw new Exception("Day must be >= 1");
+        }
+
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            throw new Exception("Miqaat not found");
+        }
+        if (day > miqaat.MiqaatDays)
+        {
+            throw new Exception($"Day must be between 1 and {miqaat.MiqaatDays}");
+        }
+
+        await _miqaatMemberRepository.MarkAttendanceBatch(miqaatId, day, memberIds);
     }
 
     private static AdminApprovalStatus ParseApprovalStatus(string status)

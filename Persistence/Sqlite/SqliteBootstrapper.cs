@@ -159,9 +159,11 @@ public sealed class SqliteBootstrapper
             CREATE TABLE IF NOT EXISTS miqaat_members (
                 member_id INTEGER NOT NULL,
                 miqaat_id INTEGER NOT NULL,
+                miqaat_day INTEGER NOT NULL DEFAULT 1,
                 status TEXT,
                 final_status TEXT,
-                PRIMARY KEY (member_id, miqaat_id),
+                is_attended INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (member_id, miqaat_id, miqaat_day),
                 FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
                 FOREIGN KEY (miqaat_id) REFERENCES local_miqaat(id) ON DELETE CASCADE
             );
