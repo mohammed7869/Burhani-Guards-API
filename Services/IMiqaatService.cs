@@ -19,5 +19,6 @@ public interface IMiqaatService
     Task<List<EnrolledMemberResponse>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
+    Task<MemberMiqaatAttendanceHistoryResponse> GetMemberAttendanceHistory(int memberId);
 }
 

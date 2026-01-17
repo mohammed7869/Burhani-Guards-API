@@ -234,6 +234,7 @@ public sealed class MySqlBootstrapper
                 `status` VARCHAR(50) NULL,
                 `final_status` VARCHAR(50) NULL,
                 `is_attended` TINYINT(1) NOT NULL DEFAULT 0,
+                `points` INT NOT NULL DEFAULT 0,
                 PRIMARY KEY (`member_id`, `miqaat_id`, `miqaat_day`),
                 INDEX `IX_miqaat_members_member_id` (`member_id`),
                 INDEX `IX_miqaat_members_miqaat_id` (`miqaat_id`),
@@ -269,6 +270,16 @@ public sealed class MySqlBootstrapper
             await dbConnection.ExecuteAsync("""
                 ALTER TABLE `miqaat_members`
                 ADD COLUMN `is_attended` TINYINT(1) NOT NULL DEFAULT 0;
+                """);
+        }
+        catch { } // Column might already exist
+
+        // Migration: Add points column if it doesn't exist
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                ALTER TABLE `miqaat_members`
+                ADD COLUMN `points` INT NOT NULL DEFAULT 0;
                 """);
         }
         catch { } // Column might already exist

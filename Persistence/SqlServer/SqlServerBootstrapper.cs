@@ -186,6 +186,7 @@ public sealed class SqlServerBootstrapper
                     [status] NVARCHAR(50) NULL,
                     [final_status] NVARCHAR(50) NULL,
                     [is_attended] BIT NOT NULL CONSTRAINT DF_miqaat_members_is_attended DEFAULT 0,
+                    [points] INT NOT NULL CONSTRAINT DF_miqaat_members_points DEFAULT 0,
                     PRIMARY KEY ([member_id], [miqaat_id], [miqaat_day])
                 );
                 CREATE INDEX IX_miqaat_members_member_id ON [dbo].[miqaat_members]([member_id]);
@@ -224,6 +225,13 @@ public sealed class SqlServerBootstrapper
             BEGIN
                 ALTER TABLE [dbo].[miqaat_members]
                 ADD [is_attended] BIT NOT NULL CONSTRAINT DF_miqaat_members_is_attended DEFAULT 0;
+            END
+
+            -- Add points column if it doesn't exist (for existing databases)
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[miqaat_members]') AND name = 'points')
+            BEGIN
+                ALTER TABLE [dbo].[miqaat_members]
+                ADD [points] INT NOT NULL CONSTRAINT DF_miqaat_members_points DEFAULT 0;
             END
             """);
 

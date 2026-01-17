@@ -159,6 +159,31 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpGet("member/{memberId}/attendance-history")]
+    public async Task<IActionResult> GetMemberAttendanceHistory(int memberId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can view member attendance/points history
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can view member attendance history");
+        }
+
+        try
+        {
+            var history = await _miqaatService.GetMemberAttendanceHistory(memberId);
+            return Ok(history);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPatch("{miqaatId}/member/{memberId}/status")]
     public async Task<IActionResult> UpdateMemberMiqaatStatus(long miqaatId, int memberId, [FromBody] UpdateMemberMiqaatStatusRequest request)
     {

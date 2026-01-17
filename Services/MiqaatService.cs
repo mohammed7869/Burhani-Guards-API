@@ -540,6 +540,31 @@ public class MiqaatService : IMiqaatService
         await _miqaatMemberRepository.MarkAttendanceBatch(miqaatId, day, memberIds);
     }
 
+    public async Task<MemberMiqaatAttendanceHistoryResponse> GetMemberAttendanceHistory(int memberId)
+    {
+        var result = await _miqaatMemberRepository.GetMemberAttendanceHistory(memberId);
+        var member = result.Member;
+        var items = result.Items;
+        var totalPoints = result.TotalPoints;
+
+        return new MemberMiqaatAttendanceHistoryResponse(
+            member.Id,
+            member.FullName,
+            member.ItsId,
+            totalPoints,
+            items.Select(i => new MemberMiqaatAttendanceItemResponse(
+                i.Id,
+                i.MiqaatName,
+                i.FromDate,
+                i.TillDate,
+                i.MiqaatDays,
+                i.MiqaatDay ?? 1,
+                i.IsAttended ?? false,
+                i.Points
+            )).ToList()
+        );
+    }
+
     private static AdminApprovalStatus ParseApprovalStatus(string status)
     {
         if (Enum.TryParse<AdminApprovalStatus>(status, true, out var parsed))

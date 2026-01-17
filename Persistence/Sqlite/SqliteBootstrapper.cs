@@ -163,6 +163,7 @@ public sealed class SqliteBootstrapper
                 status TEXT,
                 final_status TEXT,
                 is_attended INTEGER NOT NULL DEFAULT 0,
+                points INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (member_id, miqaat_id, miqaat_day),
                 FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
                 FOREIGN KEY (miqaat_id) REFERENCES local_miqaat(id) ON DELETE CASCADE

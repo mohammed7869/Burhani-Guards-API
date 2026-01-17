@@ -15,6 +15,7 @@ public interface IMiqaatMemberRepository
     Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
+    Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId);
 }
 
 public class MiqaatMemberRepository : IMiqaatMemberRepository
@@ -330,10 +331,17 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
 
         const string updateSql = """
             UPDATE `miqaat_members`
-            SET `is_attended` = 1
+            INNER JOIN `local_miqaat` lm ON lm.`id` = `miqaat_members`.`miqaat_id`
+            SET 
+                `miqaat_members`.`is_attended` = 1,
+                `miqaat_members`.`points` = CASE 
+                    WHEN IFNULL(lm.`miqaat_days`, DATEDIFF(lm.`till_date`, lm.`from_date`) + 1) = 1 THEN 6
+                    ELSE 2
+                END
             WHERE `miqaat_id` = @MiqaatId 
                 AND `miqaat_day` = @Day
                 AND `member_id` IN @MemberIds
+                AND IFNULL(`is_attended`, 0) = 0
         """;
 
         var rowsAffected = await connection.ExecuteAsync(updateSql, new 
@@ -371,6 +379,77 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         {
             throw new Exception("Miqaat member record not found");
         }
+    }
+
+    public async Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Basic member info
+        const string memberSql = """
+            SELECT 
+                `id` AS Id,
+                `its_id` AS ItsId,
+                `full_name` AS FullName,
+                `email` AS Email,
+                `contact` AS Contact,
+                `rank` AS `Rank`,
+                `jamaat` AS Jamaat,
+                `jamiyat` AS Jamiyat
+            FROM `members`
+            WHERE `id` = @MemberId
+            LIMIT 1
+        """;
+
+        var member = await connection.QueryFirstOrDefaultAsync<MemberModel>(memberSql, new { MemberId = memberId });
+        if (member == null)
+        {
+            throw new Exception("Member not found");
+        }
+
+        // Attendance history: approved miqaats (including not-attended)
+        const string historySql = """
+            SELECT
+                m.`id` AS Id,
+                m.`miqaat_name` AS MiqaatName,
+                m.`jamaat` AS Jamaat,
+                m.`jamiyat` AS Jamiyat,
+                m.`from_date` AS FromDate,
+                m.`till_date` AS TillDate,
+                IFNULL(m.`miqaat_days`, DATEDIFF(m.`till_date`, m.`from_date`) + 1) AS MiqaatDays,
+                m.`captain_name` AS CaptainName,
+                m.`admin_approval` AS AdminApproval,
+                m.`created_at` AS CreatedAt,
+                m.`updated_at` AS UpdatedAt,
+                mm.`miqaat_day` AS MiqaatDay,
+                mm.`is_attended` AS IsAttended,
+                IFNULL(mm.`points`, 0) AS Points,
+                mm.`status` AS MemberStatus,
+                mm.`final_status` AS FinalStatus
+            FROM `miqaat_members` mm
+            INNER JOIN `local_miqaat` m ON m.`id` = mm.`miqaat_id`
+            WHERE mm.`member_id` = @MemberId
+                AND m.`admin_approval` = 'Approved'
+                AND mm.`status` = 'Approved'
+                AND mm.`final_status` = 'Approved'
+            ORDER BY m.`from_date` DESC, mm.`miqaat_day` ASC
+        """;
+
+        var items = (await connection.QueryAsync<MiqaatModel>(historySql, new { MemberId = memberId })).ToList();
+
+        const string totalSql = """
+            SELECT IFNULL(SUM(IFNULL(`points`, 0)), 0)
+            FROM `miqaat_members` mm
+            INNER JOIN `local_miqaat` m ON m.`id` = mm.`miqaat_id`
+            WHERE mm.`member_id` = @MemberId
+                AND m.`admin_approval` = 'Approved'
+                AND mm.`status` = 'Approved'
+                AND mm.`final_status` = 'Approved'
+        """;
+
+        var totalPoints = await connection.QueryFirstOrDefaultAsync<int>(totalSql, new { MemberId = memberId });
+
+        return (member, items, totalPoints);
     }
 }
 
