@@ -62,6 +62,8 @@ public class AuthController : BaseController
             email = user.email,
             rank = user.rank,
             roles = user.roles,
+            jamiyat = user.jamiyat,
+            jamaat = user.jamaat,
             requiresPasswordChange = requiresPasswordChange
         };
         _tokenStore.StoreToken(token, currentUser);
@@ -130,6 +132,8 @@ public class AuthController : BaseController
                 email = user.email,
                 rank = user.rank,
                 roles = user.roles,
+                jamiyat = user.jamiyat,
+                jamaat = user.jamaat,
                 requiresPasswordChange = requiresPasswordChange
             };
             _tokenStore.StoreToken(token, currentUser);
@@ -204,6 +208,8 @@ public class AuthController : BaseController
                 email = user.email,
                 rank = user.rank,
                 roles = user.roles,
+                jamiyat = user.jamiyat,
+                jamaat = user.jamaat,
                 requiresPasswordChange = requiresPasswordChange
             };
             _tokenStore.StoreToken(token, currentUser);

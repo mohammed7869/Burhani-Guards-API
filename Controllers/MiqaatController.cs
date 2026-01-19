@@ -184,6 +184,36 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpGet("points")]
+    public async Task<IActionResult> GetPoints()
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            if (CurrentUser.roles == 2)
+            {
+                if (string.IsNullOrWhiteSpace(CurrentUser.jamaat))
+                {
+                    return BadRequest(new { message = "Jamaat not found for current user" });
+                }
+
+                var members = await _miqaatService.GetMemberPointsByJamaat(CurrentUser.jamaat);
+                return Ok(members);
+            }
+
+            var memberPoints = await _miqaatService.GetMemberPointsByMemberId(CurrentUser.id);
+            return Ok(new[] { memberPoints });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPatch("{miqaatId}/member/{memberId}/status")]
     public async Task<IActionResult> UpdateMemberMiqaatStatus(long miqaatId, int memberId, [FromBody] UpdateMemberMiqaatStatusRequest request)
     {
@@ -200,7 +230,17 @@ public class MiqaatController : BaseController
 
         try
         {
-            await _miqaatService.UpdateMemberMiqaatStatus(memberId, miqaatId, request.Status);
+            var days = request.Days?
+                .Where(d => d > 0)
+                .Distinct()
+                .ToList();
+
+            if ((days == null || days.Count == 0) && request.Day.HasValue && request.Day.Value > 0)
+            {
+                days = new List<int> { request.Day.Value };
+            }
+
+            await _miqaatService.UpdateMemberMiqaatStatus(memberId, miqaatId, request.Status, days);
             return Ok(new { message = "Miqaat status updated successfully" });
         }
         catch (Exception ex)

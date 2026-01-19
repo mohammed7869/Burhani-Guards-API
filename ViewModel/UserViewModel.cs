@@ -57,6 +57,8 @@ public class CurrentUserViewModel
     public string email { get; set; } = string.Empty;
     public string rank { get; set; } = string.Empty;
     public int? roles { get; set; }
+    public string? jamiyat { get; set; }
+    public string? jamaat { get; set; }
     public bool requiresPasswordChange { get; set; }
 }
 

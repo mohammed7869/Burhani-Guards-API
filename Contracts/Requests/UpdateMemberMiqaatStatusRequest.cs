@@ -1,7 +1,9 @@
 namespace BurhaniGuards.Api.Contracts.Requests;
 
 public sealed record UpdateMemberMiqaatStatusRequest(
-    string Status
+    string Status,
+    int? Day,
+    List<int>? Days
 );
 
 

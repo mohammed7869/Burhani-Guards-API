@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BurhaniGuards.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ae937c9f68f227e04a37c4c020a7e8fce6ae4828")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3342d27820525eacdf056291d5b9ca8071b746cf")]
 [assembly: System.Reflection.AssemblyProductAttribute("BurhaniGuards.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BurhaniGuards.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

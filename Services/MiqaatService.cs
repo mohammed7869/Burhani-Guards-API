@@ -438,7 +438,7 @@ public class MiqaatService : IMiqaatService
         }
     }
 
-    public async Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status)
+    public async Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days)
     {
         // Validate status
         if (status != "Approved" && status != "Rejected" && status != "Pending")
@@ -446,7 +446,53 @@ public class MiqaatService : IMiqaatService
             throw new Exception("Invalid status. Must be 'Approved', 'Rejected', or 'Pending'");
         }
 
-        await _miqaatMemberRepository.UpdateMemberMiqaatStatus(memberId, miqaatId, status);
+        if (days != null && days.Count > 0)
+        {
+            if (days.Any(d => d < 1))
+            {
+                throw new Exception("Day must be >= 1");
+            }
+
+            var miqaat = await _miqaatRepository.GetById(miqaatId);
+            if (miqaat == null)
+            {
+                throw new Exception("Miqaat not found");
+            }
+
+            if (days.Any(d => d > miqaat.MiqaatDays))
+            {
+                throw new Exception($"Day must be between 1 and {miqaat.MiqaatDays}");
+            }
+        }
+
+        await _miqaatMemberRepository.UpdateMemberMiqaatStatus(memberId, miqaatId, status, days);
+    }
+
+    public async Task<List<MemberPointsResponse>> GetMemberPointsByJamaat(string jamaat)
+    {
+        if (string.IsNullOrWhiteSpace(jamaat))
+        {
+            throw new Exception("Jamaat is required");
+        }
+
+        var members = await _miqaatMemberRepository.GetMemberPointsByJamaat(jamaat);
+        return members.Select(m => new MemberPointsResponse(
+            m.Id,
+            m.FullName,
+            m.ItsId,
+            m.TotalPoints
+        )).ToList();
+    }
+
+    public async Task<MemberPointsResponse> GetMemberPointsByMemberId(int memberId)
+    {
+        var member = await _miqaatMemberRepository.GetMemberPointsByMemberId(memberId);
+        return new MemberPointsResponse(
+            member.Id,
+            member.FullName,
+            member.ItsId,
+            member.TotalPoints
+        );
     }
 
     public async Task<List<EnrolledMemberResponse>> GetEnrolledMembersByMiqaatId(long miqaatId)

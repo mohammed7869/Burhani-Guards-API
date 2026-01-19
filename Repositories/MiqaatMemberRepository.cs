@@ -8,7 +8,9 @@ public interface IMiqaatMemberRepository
 {
     Task UpsertMembersForMiqaat(long miqaatId, string jamaat, AdminApprovalStatus status);
     Task<List<MiqaatModel>> GetMiqaatsByMemberId(int memberId);
-    Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status);
+    Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days);
+    Task<List<MemberPointsModel>> GetMemberPointsByJamaat(string jamaat);
+    Task<MemberPointsModel> GetMemberPointsByMemberId(int memberId);
     Task<List<MemberModel>> GetEnrolledMembersByMiqaatId(long miqaatId);
     Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task<Dictionary<long, string?>> GetFinalStatusesByMiqaatId(long miqaatId);
@@ -93,13 +95,27 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`captain_name` AS CaptainName,
                 m.`created_at` AS CreatedAt,
                 m.`updated_at` AS UpdatedAt,
-                mm.`status` AS MemberStatus,
-                mm.`final_status` AS FinalStatus
+                mm.`MemberStatus` AS MemberStatus,
+                mm.`FinalStatus` AS FinalStatus
             FROM `local_miqaat` m
-            INNER JOIN `miqaat_members` mm ON m.`id` = mm.`miqaat_id`
-            WHERE mm.`member_id` = @MemberId
-                AND mm.`miqaat_day` = 1
-                AND m.`admin_approval` = 'Approved'
+            INNER JOIN (
+                SELECT 
+                    `miqaat_id`,
+                    CASE 
+                        WHEN SUM(CASE WHEN `status` = 'Approved' THEN 1 ELSE 0 END) > 0 THEN 'Approved'
+                        WHEN SUM(CASE WHEN `status` = 'Rejected' THEN 1 ELSE 0 END) > 0 THEN 'Rejected'
+                        ELSE 'Pending'
+                    END AS `MemberStatus`,
+                    CASE 
+                        WHEN SUM(CASE WHEN `final_status` = 'Approved' THEN 1 ELSE 0 END) > 0 THEN 'Approved'
+                        WHEN SUM(CASE WHEN `final_status` = 'Rejected' THEN 1 ELSE 0 END) > 0 THEN 'Rejected'
+                        ELSE NULL
+                    END AS `FinalStatus`
+                FROM `miqaat_members`
+                WHERE `member_id` = @MemberId
+                GROUP BY `miqaat_id`
+            ) mm ON m.`id` = mm.`miqaat_id`
+            WHERE m.`admin_approval` = 'Approved'
             ORDER BY m.`created_at` DESC
         """;
 
@@ -107,27 +123,101 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         return miqaats.ToList();
     }
 
-    public async Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status)
+    public async Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days)
     {
         using var connection = _context.CreateConnection();
 
-        const string updateSql = """
+        var updateSql = """
             UPDATE `miqaat_members`
             SET `status` = @Status
             WHERE `member_id` = @MemberId AND `miqaat_id` = @MiqaatId
         """;
 
+        if (days != null && days.Count > 0)
+        {
+            updateSql += " AND `miqaat_day` IN @Days";
+        }
+
+        if (status != "Pending")
+        {
+            updateSql += " AND `status` = 'Pending'";
+        }
+
         var rowsAffected = await connection.ExecuteAsync(updateSql, new 
         { 
             MemberId = memberId, 
             MiqaatId = miqaatId, 
-            Status = status 
+            Status = status,
+            Days = days
         });
 
         if (rowsAffected == 0)
         {
             throw new Exception("Miqaat member record not found");
         }
+    }
+
+    public async Task<List<MemberPointsModel>> GetMemberPointsByJamaat(string jamaat)
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                m.`id` AS Id,
+                m.`full_name` AS FullName,
+                m.`its_id` AS ItsId,
+                IFNULL(SUM(CASE 
+                    WHEN lm.`admin_approval` = 'Approved'
+                     AND mm.`status` = 'Approved'
+                     AND mm.`final_status` = 'Approved'
+                    THEN IFNULL(mm.`points`, 0)
+                    ELSE 0
+                END), 0) AS TotalPoints
+            FROM `members` m
+            LEFT JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            LEFT JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
+            WHERE m.`jamaat` = @Jamaat
+                AND m.`is_active` = 1
+            GROUP BY m.`id`, m.`full_name`, m.`its_id`
+            ORDER BY m.`full_name` ASC
+        """;
+
+        var result = await connection.QueryAsync<MemberPointsModel>(sql, new { Jamaat = jamaat });
+        return result.ToList();
+    }
+
+    public async Task<MemberPointsModel> GetMemberPointsByMemberId(int memberId)
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                m.`id` AS Id,
+                m.`full_name` AS FullName,
+                m.`its_id` AS ItsId,
+                IFNULL(SUM(CASE 
+                    WHEN lm.`admin_approval` = 'Approved'
+                     AND mm.`status` = 'Approved'
+                     AND mm.`final_status` = 'Approved'
+                    THEN IFNULL(mm.`points`, 0)
+                    ELSE 0
+                END), 0) AS TotalPoints
+            FROM `members` m
+            LEFT JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            LEFT JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
+            WHERE m.`id` = @MemberId
+                AND m.`is_active` = 1
+            GROUP BY m.`id`, m.`full_name`, m.`its_id`
+            LIMIT 1
+        """;
+
+        var member = await connection.QueryFirstOrDefaultAsync<MemberPointsModel>(sql, new { MemberId = memberId });
+        if (member == null)
+        {
+            throw new Exception("Member not found");
+        }
+
+        return member;
     }
 
     public async Task<List<MemberModel>> GetEnrolledMembersByMiqaatId(long miqaatId)
