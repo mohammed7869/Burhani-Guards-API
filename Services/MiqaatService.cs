@@ -159,6 +159,9 @@ public class MiqaatService : IMiqaatService
             ConvertUtcToIst(createdMiqaat.CreatedAt),
             ConvertUtcToIst(createdMiqaat.UpdatedAt),
             null,
+            null,
+            null,
+            null,
             null
         );
     }
@@ -181,7 +184,10 @@ public class MiqaatService : IMiqaatService
             ConvertUtcToIst(m.CreatedAt),
             ConvertUtcToIst(m.UpdatedAt),
             null,
-            null
+            null,
+            m.MiqaatImage1,
+            m.MiqaatImage2,
+            m.Notes
         )).ToList();
     }
 
@@ -208,7 +214,10 @@ public class MiqaatService : IMiqaatService
             ConvertUtcToIst(miqaat.CreatedAt),
             ConvertUtcToIst(miqaat.UpdatedAt),
             null,
-            null
+            null,
+            miqaat.MiqaatImage1,
+            miqaat.MiqaatImage2,
+            miqaat.Notes
         );
     }
 
@@ -398,7 +407,10 @@ public class MiqaatService : IMiqaatService
             ConvertUtcToIst(m.CreatedAt),
             ConvertUtcToIst(m.UpdatedAt),
             m.MemberStatus,
-            m.FinalStatus
+            m.FinalStatus,
+            null,
+            null,
+            null
         )).ToList();
     }
 
@@ -420,7 +432,10 @@ public class MiqaatService : IMiqaatService
             ConvertUtcToIst(m.CreatedAt),
             ConvertUtcToIst(m.UpdatedAt),
             null,
-            null
+            null,
+            m.MiqaatImage1,
+            m.MiqaatImage2,
+            m.Notes
         )).ToList();
     }
 
@@ -619,6 +634,42 @@ public class MiqaatService : IMiqaatService
         }
 
         throw new Exception("Invalid approval status. Must be 'Pending', 'Approved', or 'Rejected'");
+    }
+
+    public async Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes)
+    {
+        var existingMiqaat = await _miqaatRepository.GetById(miqaatId);
+        if (existingMiqaat == null)
+        {
+            throw new Exception("Miqaat not found");
+        }
+
+        await _miqaatRepository.UpdateMiqaatReport(miqaatId, image1, image2, notes);
+    }
+
+    public async Task<bool> HasExistingReport(long miqaatId)
+    {
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            return false;
+        }
+
+        // Check if any report fields are filled
+        return !string.IsNullOrWhiteSpace(miqaat.MiqaatImage1) ||
+               !string.IsNullOrWhiteSpace(miqaat.MiqaatImage2) ||
+               !string.IsNullOrWhiteSpace(miqaat.Notes);
+    }
+
+    public async Task<List<MemberEnrollmentDayResponse>> GetMemberEnrollmentDays(long miqaatId, int memberId)
+    {
+        var enrollmentDays = await _miqaatMemberRepository.GetMemberEnrollmentDays(miqaatId, memberId);
+        return enrollmentDays.Select(d => new MemberEnrollmentDayResponse(
+            d.MiqaatDay,
+            d.Status,
+            d.FinalStatus,
+            d.MiqaatDate.ToString("dd MMM yyyy")
+        )).ToList();
     }
 }
 

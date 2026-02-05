@@ -88,6 +88,9 @@ public class MiqaatRepository : IMiqaatRepository
                     `about_miqaat` AS AboutMiqaat,
                     `admin_approval` AS AdminApproval,
                     `captain_name` AS CaptainName,
+                    `miqaat_image_1` AS MiqaatImage1,
+                    `miqaat_image_2` AS MiqaatImage2,
+                    `notes` AS Notes,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`
@@ -170,6 +173,30 @@ public class MiqaatRepository : IMiqaatRepository
 
             var miqaats = await connection.QueryAsync<MiqaatModel>(sql, new { CaptainName = captainName });
             return miqaats.ToList();
+        }
+    }
+
+    public async Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                UPDATE `local_miqaat`
+                SET 
+                    `miqaat_image_1` = @Image1,
+                    `miqaat_image_2` = @Image2,
+                    `notes` = @Notes,
+                    `updated_at` = @UpdatedAt
+                WHERE `id` = @Id";
+
+            await connection.ExecuteAsync(sql, new
+            {
+                Id = miqaatId,
+                Image1 = image1,
+                Image2 = image2,
+                Notes = notes,
+                UpdatedAt = DateTime.UtcNow
+            });
         }
     }
 }

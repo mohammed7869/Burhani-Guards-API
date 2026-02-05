@@ -18,6 +18,7 @@ public interface IMiqaatMemberRepository
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId);
+    Task<List<MemberEnrollmentDayModel>> GetMemberEnrollmentDays(long miqaatId, int memberId);
 }
 
 public class MiqaatMemberRepository : IMiqaatMemberRepository
@@ -540,6 +541,27 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         var totalPoints = await connection.QueryFirstOrDefaultAsync<int>(totalSql, new { MemberId = memberId });
 
         return (member, items, totalPoints);
+    }
+
+    public async Task<List<MemberEnrollmentDayModel>> GetMemberEnrollmentDays(long miqaatId, int memberId)
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT 
+                mm.`miqaat_day` AS MiqaatDay,
+                mm.`status` AS Status,
+                mm.`final_status` AS FinalStatus,
+                DATE_ADD(m.`from_date`, INTERVAL (mm.`miqaat_day` - 1) DAY) AS MiqaatDate
+            FROM `miqaat_members` mm
+            INNER JOIN `local_miqaat` m ON m.`id` = mm.`miqaat_id`
+            WHERE mm.`miqaat_id` = @MiqaatId 
+                AND mm.`member_id` = @MemberId
+            ORDER BY mm.`miqaat_day` ASC
+        """;
+
+        var result = await connection.QueryAsync<MemberEnrollmentDayModel>(sql, new { MiqaatId = miqaatId, MemberId = memberId });
+        return result.ToList();
     }
 }
 

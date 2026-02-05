@@ -24,5 +24,9 @@ public class MiqaatModel : BaseModel
     public int? MiqaatDay { get; set; }
     public bool? IsAttended { get; set; }
     public int Points { get; set; }
+    // Report fields
+    public string? MiqaatImage1 { get; set; }
+    public string? MiqaatImage2 { get; set; }
+    public string? Notes { get; set; }
 }
 

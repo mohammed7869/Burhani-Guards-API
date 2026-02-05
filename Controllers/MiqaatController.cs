@@ -167,8 +167,8 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can view member attendance/points history
-        if (CurrentUser.roles != 2)
+        // Only Captains can view member attendance/points history, unless it's the member themselves
+        if (CurrentUser.roles != 2 && CurrentUser.id != memberId)
         {
             return Forbid("Only Captains can view member attendance history");
         }
@@ -324,6 +324,31 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpGet("{miqaatId}/member/{memberId}/enrollment-days")]
+    public async Task<IActionResult> GetMemberEnrollmentDays(long miqaatId, int memberId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can view member enrollment days
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can view member enrollment days");
+        }
+
+        try
+        {
+            var enrollmentDays = await _miqaatService.GetMemberEnrollmentDays(miqaatId, memberId);
+            return Ok(enrollmentDays);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{miqaatId}/mark-attendance")]
     public async Task<IActionResult> MarkAttendance(long miqaatId, [FromBody] MarkAttendanceRequest request)
     {
@@ -347,6 +372,91 @@ public class MiqaatController : BaseController
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("{miqaatId}/report")]
+    public async Task<IActionResult> SubmitMiqaatReport(long miqaatId, [FromForm] SubmitMiqaatReportRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can submit miqaat reports
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can submit miqaat reports");
+        }
+
+        // Validate mandatory fields
+        if (request.Image1 == null || request.Image1.Length == 0)
+        {
+            return BadRequest(new { message = "Image 1 is required" });
+        }
+        if (request.Image2 == null || request.Image2.Length == 0)
+        {
+            return BadRequest(new { message = "Image 2 is required" });
+        }
+        if (string.IsNullOrWhiteSpace(request.Notes))
+        {
+            return BadRequest(new { message = "Notes is required" });
+        }
+
+        try
+        {
+            // Check if report already exists
+            var existingMiqaat = await _miqaatService.GetById(miqaatId);
+            if (existingMiqaat == null)
+            {
+                return NotFound(new { message = "Miqaat not found" });
+            }
+
+            // Check if report already submitted by checking if images or notes exist
+            var hasExistingReport = await _miqaatService.HasExistingReport(miqaatId);
+            if (hasExistingReport)
+            {
+                return BadRequest(new { message = "Report already submitted for this miqaat" });
+            }
+
+            string? image1FileName = null;
+            string? image2FileName = null;
+
+            // Save images
+            image1FileName = await SaveUploadedImage(request.Image1, miqaatId, 1);
+            image2FileName = await SaveUploadedImage(request.Image2, miqaatId, 2);
+
+            await _miqaatService.UpdateMiqaatReport(miqaatId, image1FileName, image2FileName, request.Notes);
+            return Ok(new { message = "Report submitted successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private async Task<string> SaveUploadedImage(IFormFile file, long miqaatId, int imageNumber)
+    {
+        // Get file extension from the uploaded file
+        var extension = Path.GetExtension(file.FileName)?.ToLower() ?? ".jpg";
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            extension = ".jpg";
+        }
+
+        var fileName = $"miqaat_{miqaatId}_img{imageNumber}_{DateTime.UtcNow:yyyyMMddHHmmss}{extension}";
+        
+        // Save to the specified path
+        var uploadsPath = @"C:\var\www\bgp_uploads\miqaat_images";
+        Directory.CreateDirectory(uploadsPath);
+        
+        var filePath = Path.Combine(uploadsPath, fileName);
+        
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+        
+        return fileName;
     }
 }
 

@@ -22,5 +22,8 @@ public interface IMiqaatService
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     Task<MemberMiqaatAttendanceHistoryResponse> GetMemberAttendanceHistory(int memberId);
+    Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes);
+    Task<bool> HasExistingReport(long miqaatId);
+    Task<List<MemberEnrollmentDayResponse>> GetMemberEnrollmentDays(long miqaatId, int memberId);
 }
 
