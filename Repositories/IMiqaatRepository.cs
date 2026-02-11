@@ -10,6 +10,6 @@ public interface IMiqaatRepository
     Task Update(MiqaatModel model);
     Task Delete(long id);
     Task<List<MiqaatModel>> GetByCaptainName(string captainName);
-    Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes);
+    Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes, string? khidmatDone);
 }
 

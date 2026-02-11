@@ -61,6 +61,11 @@ public class MiqaatRepository : IMiqaatRepository
                     `about_miqaat` AS AboutMiqaat,
                     `admin_approval` AS AdminApproval,
                     `captain_name` AS CaptainName,
+                    `miqaat_image_1` AS MiqaatImage1,
+                    `miqaat_image_2` AS MiqaatImage2,
+                    `notes` AS Notes,
+                    `khidmat_done` AS KhidmatDone,
+                    `is_report_submitted` AS IsReportSubmitted,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`
@@ -91,6 +96,8 @@ public class MiqaatRepository : IMiqaatRepository
                     `miqaat_image_1` AS MiqaatImage1,
                     `miqaat_image_2` AS MiqaatImage2,
                     `notes` AS Notes,
+                    `khidmat_done` AS KhidmatDone,
+                    `is_report_submitted` AS IsReportSubmitted,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`
@@ -165,6 +172,11 @@ public class MiqaatRepository : IMiqaatRepository
                     `about_miqaat` AS AboutMiqaat,
                     `admin_approval` AS AdminApproval,
                     `captain_name` AS CaptainName,
+                    `miqaat_image_1` AS MiqaatImage1,
+                    `miqaat_image_2` AS MiqaatImage2,
+                    `notes` AS Notes,
+                    `khidmat_done` AS KhidmatDone,
+                    `is_report_submitted` AS IsReportSubmitted,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`
@@ -176,7 +188,7 @@ public class MiqaatRepository : IMiqaatRepository
         }
     }
 
-    public async Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes)
+    public async Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes, string? khidmatDone)
     {
         using (var connection = _context.CreateConnection())
         {
@@ -186,6 +198,8 @@ public class MiqaatRepository : IMiqaatRepository
                     `miqaat_image_1` = @Image1,
                     `miqaat_image_2` = @Image2,
                     `notes` = @Notes,
+                    `khidmat_done` = @KhidmatDone,
+                    `is_report_submitted` = 1,
                     `updated_at` = @UpdatedAt
                 WHERE `id` = @Id";
 
@@ -195,6 +209,7 @@ public class MiqaatRepository : IMiqaatRepository
                 Image1 = image1,
                 Image2 = image2,
                 Notes = notes,
+                KhidmatDone = khidmatDone,
                 UpdatedAt = DateTime.UtcNow
             });
         }

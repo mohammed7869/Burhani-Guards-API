@@ -18,7 +18,9 @@ public sealed record MiqaatResponse(
     string? FinalStatus,
     string? MiqaatImage1,
     string? MiqaatImage2,
-    string? Notes
+    string? Notes,
+    string? KhidmatDone,
+    bool IsReportSubmitted
 );
 
 

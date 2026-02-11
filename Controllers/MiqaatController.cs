@@ -274,6 +274,31 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpGet("{miqaatId}/all-members")]
+    public async Task<IActionResult> GetAllMembersByMiqaatId(long miqaatId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Captains can view all members
+        if (CurrentUser.roles != 2)
+        {
+            return Forbid("Only Captains can view all members");
+        }
+
+        try
+        {
+            var members = await _miqaatService.GetAllMembersByMiqaatId(miqaatId);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("{miqaatId}/approved-members-for-attendance")]
     public async Task<IActionResult> GetApprovedMembersForAttendance(long miqaatId, [FromQuery] int day = 1)
     {
@@ -401,6 +426,10 @@ public class MiqaatController : BaseController
         {
             return BadRequest(new { message = "Notes is required" });
         }
+        if (string.IsNullOrWhiteSpace(request.KhidmatDone))
+        {
+            return BadRequest(new { message = "At least one Khidmat is required" });
+        }
 
         try
         {
@@ -425,7 +454,7 @@ public class MiqaatController : BaseController
             image1FileName = await SaveUploadedImage(request.Image1, miqaatId, 1);
             image2FileName = await SaveUploadedImage(request.Image2, miqaatId, 2);
 
-            await _miqaatService.UpdateMiqaatReport(miqaatId, image1FileName, image2FileName, request.Notes);
+            await _miqaatService.UpdateMiqaatReport(miqaatId, image1FileName, image2FileName, request.Notes, request.KhidmatDone);
             return Ok(new { message = "Report submitted successfully" });
         }
         catch (Exception ex)

@@ -28,5 +28,7 @@ public class MiqaatModel : BaseModel
     public string? MiqaatImage1 { get; set; }
     public string? MiqaatImage2 { get; set; }
     public string? Notes { get; set; }
+    public string? KhidmatDone { get; set; }
+    public bool IsReportSubmitted { get; set; }
 }
 

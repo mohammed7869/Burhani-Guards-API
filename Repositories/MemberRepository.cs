@@ -17,6 +17,11 @@ public interface IDapperMemberRepository
     Task<MemberModel> GetByItsId(string itsId);
     Task<MemberModel> GetByEmail(string email);
     Task UpdatePassword(MemberModel model);
+    Task SaveOtp(long memberId, string otpCode, DateTime validTill);
+    Task<MemberModel?> GetByItsIdOrNull(string itsId);
+    Task<bool> VerifyOtp(string itsId, string otpCode);
+    Task ClearOtp(long memberId);
+    Task ResetPassword(long memberId, string newPasswordHash);
 }
 
 public class DapperMemberRepository : IDapperMemberRepository
@@ -36,7 +41,7 @@ public class DapperMemberRepository : IDapperMemberRepository
         using (var connection = _context.CreateConnection())
         {
             // Check duplicate ITS ID
-            var checkDupSql = @"SELECT 1 FROM [dbo].[members] WHERE [its_id] = @ItsId AND [is_active] = 1";
+            var checkDupSql = @"SELECT 1 FROM members WHERE its_id = @ItsId AND is_active = 1";
             var exists = await connection.QueryAsync<int?>(checkDupSql, new { ItsId = viewmodel.ItsId });
 
             if (exists.FirstOrDefault().HasValue)
@@ -45,7 +50,7 @@ public class DapperMemberRepository : IDapperMemberRepository
             }
 
             // Check duplicate email
-            var checkDupSql2 = @"SELECT 1 FROM [dbo].[members] WHERE [email] = @Email AND [is_active] = 1";
+            var checkDupSql2 = @"SELECT 1 FROM members WHERE email = @Email AND is_active = 1";
             var exists2 = await connection.QueryAsync<int?>(checkDupSql2, new { Email = viewmodel.Email });
 
             if (exists2.FirstOrDefault().HasValue)
@@ -88,7 +93,7 @@ public class DapperMemberRepository : IDapperMemberRepository
             }
 
             // Check email duplicate
-            var checkDupSql2 = @"SELECT 1 FROM [dbo].[members] WHERE [id] <> @Id AND [email] = @Email AND [is_active] = 1";
+            var checkDupSql2 = @"SELECT 1 FROM members WHERE id <> @Id AND email = @Email AND is_active = 1";
             var exists2 = await connection.QueryAsync<int?>(checkDupSql2, viewmodel);
 
             if (exists2.FirstOrDefault().HasValue)
@@ -114,16 +119,16 @@ public class DapperMemberRepository : IDapperMemberRepository
     {
         string sql = @"
             SELECT 
-                m.[id],
-                m.[its_id] AS itsId,
-                m.[full_name] AS fullName,
-                m.[email],
-                m.[rank],
-                m.[is_active] AS isActive,
-                m.[created_at] AS createdAt
-            FROM [dbo].[members] m
-            WHERE m.[is_active] = 1
-            ORDER BY m.[created_at] DESC
+                m.id,
+                m.its_id AS itsId,
+                m.full_name AS fullName,
+                m.email,
+                m.rank,
+                m.is_active AS isActive,
+                m.created_at AS createdAt
+            FROM members m
+            WHERE m.is_active = 1
+            ORDER BY m.created_at DESC
         ";
 
         using (var connection = _context.CreateConnection())
@@ -180,7 +185,7 @@ public class DapperMemberRepository : IDapperMemberRepository
             }
 
             // Check email duplicate
-            var checkDupSql2 = @"SELECT 1 FROM [dbo].[members] WHERE [id] <> @Id AND [email] = @Email AND [is_active] = 1";
+            var checkDupSql2 = @"SELECT 1 FROM members WHERE id <> @Id AND email = @Email AND is_active = 1";
             var exists2 = await connection.QueryAsync<int?>(checkDupSql2, viewmodel);
 
             if (exists2.FirstOrDefault().HasValue)
@@ -203,8 +208,8 @@ public class DapperMemberRepository : IDapperMemberRepository
         {
             var sql = @"
                 SELECT *
-                FROM [dbo].[members] 
-                WHERE [its_id] = @ItsId AND [is_active] = 1
+                FROM members 
+                WHERE its_id = @ItsId AND is_active = 1
             ";
 
             var member = await connection.QueryFirstOrDefaultAsync<MemberModel>(sql, new { ItsId = itsId });
@@ -224,8 +229,8 @@ public class DapperMemberRepository : IDapperMemberRepository
         {
             var sql = @"
                 SELECT *
-                FROM [dbo].[members] 
-                WHERE [email] = @Email AND [is_active] = 1
+                FROM members 
+                WHERE email = @Email AND is_active = 1
             ";
 
             var member = await connection.QueryFirstOrDefaultAsync<MemberModel>(sql, new { Email = email });
@@ -256,5 +261,102 @@ public class DapperMemberRepository : IDapperMemberRepository
             await connection.UpdateAsync(member);
         }
     }
-}
 
+    public async Task SaveOtp(long memberId, string otpCode, DateTime validTill)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                UPDATE members 
+                SET otp_code = @OtpCode, otp_valid_till = @ValidTill, updated_at = @UpdatedAt
+                WHERE id = @MemberId AND is_active = 1
+            ";
+
+            await connection.ExecuteAsync(sql, new 
+            { 
+                OtpCode = otpCode, 
+                ValidTill = validTill, 
+                UpdatedAt = DateTime.UtcNow,
+                MemberId = memberId 
+            });
+        }
+    }
+
+    public async Task<MemberModel?> GetByItsIdOrNull(string itsId)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT *
+                FROM members 
+                WHERE its_id = @ItsId AND is_active = 1
+            ";
+
+            return await connection.QueryFirstOrDefaultAsync<MemberModel>(sql, new { ItsId = itsId });
+        }
+    }
+
+    public async Task<bool> VerifyOtp(string itsId, string otpCode)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT 1 
+                FROM members 
+                WHERE its_id = @ItsId 
+                    AND otp_code = @OtpCode 
+                    AND otp_valid_till > @CurrentTime
+                    AND is_active = 1
+            ";
+
+            var result = await connection.QueryFirstOrDefaultAsync<int?>(sql, new 
+            { 
+                ItsId = itsId, 
+                OtpCode = otpCode,
+                CurrentTime = DateTime.UtcNow
+            });
+
+            return result.HasValue;
+        }
+    }
+
+    public async Task ClearOtp(long memberId)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                UPDATE members 
+                SET otp_code = NULL, otp_valid_till = NULL, updated_at = @UpdatedAt
+                WHERE id = @MemberId
+            ";
+
+            await connection.ExecuteAsync(sql, new 
+            { 
+                UpdatedAt = DateTime.UtcNow,
+                MemberId = memberId 
+            });
+        }
+    }
+
+    public async Task ResetPassword(long memberId, string newPasswordHash)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                UPDATE members 
+                SET new_password_hash = @NewPasswordHash, 
+                    otp_code = NULL, 
+                    otp_valid_till = NULL, 
+                    updated_at = @UpdatedAt
+                WHERE id = @MemberId AND is_active = 1
+            ";
+
+            await connection.ExecuteAsync(sql, new 
+            { 
+                NewPasswordHash = newPasswordHash, 
+                UpdatedAt = DateTime.UtcNow,
+                MemberId = memberId 
+            });
+        }
+    }
+}

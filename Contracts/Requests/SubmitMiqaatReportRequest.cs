@@ -7,4 +7,5 @@ public class SubmitMiqaatReportRequest
     public IFormFile? Image1 { get; set; }
     public IFormFile? Image2 { get; set; }
     public string? Notes { get; set; }
+    public string? KhidmatDone { get; set; }
 }

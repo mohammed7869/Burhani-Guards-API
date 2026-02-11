@@ -89,6 +89,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IMiqaatRepository, MiqaatRepository>();
 builder.Services.AddScoped<IMiqaatMemberRepository, MiqaatMemberRepository>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<IDapperMemberRepository, DapperMemberRepository>();
 
 // Register old repositories (for backward compatibility if needed)
 builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.ICaptainRepository, BurhaniGuards.Api.Repositories.SqlServer.CaptainRepository>();

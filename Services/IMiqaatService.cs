@@ -18,11 +18,12 @@ public interface IMiqaatService
     Task<List<MemberPointsResponse>> GetMemberPointsByJamaat(string jamaat);
     Task<MemberPointsResponse> GetMemberPointsByMemberId(int memberId);
     Task<List<EnrolledMemberResponse>> GetEnrolledMembersByMiqaatId(long miqaatId);
+    Task<List<EnrolledMemberResponse>> GetAllMembersByMiqaatId(long miqaatId);
     Task<List<EnrolledMemberResponse>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     Task<MemberMiqaatAttendanceHistoryResponse> GetMemberAttendanceHistory(int memberId);
-    Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes);
+    Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes, string? khidmatDone);
     Task<bool> HasExistingReport(long miqaatId);
     Task<List<MemberEnrollmentDayResponse>> GetMemberEnrollmentDays(long miqaatId, int memberId);
 }

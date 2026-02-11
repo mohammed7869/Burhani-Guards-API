@@ -10,6 +10,7 @@ public sealed record EnrolledMemberResponse(
     string? Jamiyat,
     string? FinalStatus,
     string? ItsId,
-    bool? IsAttended
+    bool? IsAttended,
+    string? StatusCategory  // "Enrolled", "Pending", or "Rejected"
 );
 

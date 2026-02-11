@@ -12,6 +12,7 @@ public interface IMiqaatMemberRepository
     Task<List<MemberPointsModel>> GetMemberPointsByJamaat(string jamaat);
     Task<MemberPointsModel> GetMemberPointsByMemberId(int memberId);
     Task<List<MemberModel>> GetEnrolledMembersByMiqaatId(long miqaatId);
+    Task<List<(MemberModel Member, string StatusCategory)>> GetAllMembersByMiqaatId(long miqaatId);
     Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task<Dictionary<long, string?>> GetFinalStatusesByMiqaatId(long miqaatId);
     Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
@@ -291,6 +292,95 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         return members;
     }
 
+    public async Task<List<(MemberModel Member, string StatusCategory)>> GetAllMembersByMiqaatId(long miqaatId)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Query to get all members with their aggregated status for this miqaat
+        const string sql = """
+            SELECT 
+                m.`id` AS Id,
+                m.`profile` AS Profile,
+                m.`its_id` AS ItsId,
+                m.`rank` AS `Rank`,
+                m.`roles` AS Roles,
+                m.`jamiyat` AS Jamiyat,
+                m.`jamaat` AS Jamaat,
+                m.`jamiyat_id` AS JamiyatId,
+                m.`jamaat_id` AS JamaatId,
+                m.`full_name` AS FullName,
+                m.`gender` AS Gender,
+                m.`email` AS Email,
+                m.`age` AS Age,
+                m.`contact` AS Contact,
+                m.`is_active` AS IsActive,
+                m.`created_at` AS CreatedAt,
+                m.`updated_at` AS UpdatedAt,
+                SUM(CASE WHEN mm.`status` = 'Approved' THEN 1 ELSE 0 END) AS ApprovedCount,
+                SUM(CASE WHEN mm.`status` = 'Rejected' THEN 1 ELSE 0 END) AS RejectedCount,
+                SUM(CASE WHEN mm.`status` = 'Pending' THEN 1 ELSE 0 END) AS PendingCount,
+                COUNT(*) AS TotalDays
+            FROM `members` m
+            INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            WHERE mm.`miqaat_id` = @MiqaatId 
+                AND m.`is_active` = 1
+            GROUP BY m.`id`, m.`profile`, m.`its_id`, m.`rank`, m.`roles`, m.`jamiyat`, m.`jamaat`, 
+                     m.`jamiyat_id`, m.`jamaat_id`, m.`full_name`, m.`gender`, m.`email`, m.`age`, 
+                     m.`contact`, m.`is_active`, m.`created_at`, m.`updated_at`
+            ORDER BY m.`full_name` ASC
+        """;
+
+        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
+        var members = new List<(MemberModel Member, string StatusCategory)>();
+        
+        foreach (var row in result)
+        {
+            var member = new MemberModel
+            {
+                Id = (long)row.Id,
+                Profile = row.Profile as string,
+                ItsId = row.ItsId as string ?? string.Empty,
+                Rank = row.Rank as string ?? string.Empty,
+                Roles = row.Roles as int?,
+                Jamiyat = row.Jamiyat as string,
+                Jamaat = row.Jamaat as string,
+                JamiyatId = row.JamiyatId as int?,
+                JamaatId = row.JamaatId as int?,
+                FullName = row.FullName as string ?? string.Empty,
+                Gender = row.Gender as string,
+                Email = row.Email as string ?? string.Empty,
+                Age = row.Age as int?,
+                Contact = row.Contact as string,
+                IsActive = row.IsActive as bool? ?? true,
+                CreatedAt = row.CreatedAt as DateTime? ?? DateTime.UtcNow,
+                UpdatedAt = row.UpdatedAt as DateTime? ?? DateTime.UtcNow
+            };
+
+            // Determine status category
+            var approvedCount = Convert.ToInt32(row.ApprovedCount);
+            var rejectedCount = Convert.ToInt32(row.RejectedCount);
+            var pendingCount = Convert.ToInt32(row.PendingCount);
+
+            string statusCategory;
+            if (approvedCount > 0)
+            {
+                statusCategory = "Enrolled";
+            }
+            else if (rejectedCount > 0)
+            {
+                statusCategory = "Rejected";
+            }
+            else
+            {
+                statusCategory = "Pending";
+            }
+
+            members.Add((member, statusCategory));
+        }
+        
+        return members;
+    }
+
     public async Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day)
     {
         using var connection = _context.CreateConnection();
@@ -425,10 +515,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             INNER JOIN `local_miqaat` lm ON lm.`id` = `miqaat_members`.`miqaat_id`
             SET 
                 `miqaat_members`.`is_attended` = 1,
-                `miqaat_members`.`points` = CASE 
-                    WHEN IFNULL(lm.`miqaat_days`, DATEDIFF(lm.`till_date`, lm.`from_date`) + 1) = 1 THEN 6
-                    ELSE 2
-                END
+                `miqaat_members`.`points` = 2
             WHERE `miqaat_id` = @MiqaatId 
                 AND `miqaat_day` = @Day
                 AND `member_id` IN @MemberIds

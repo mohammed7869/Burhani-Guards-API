@@ -162,7 +162,9 @@ public class MiqaatService : IMiqaatService
             null,
             null,
             null,
-            null
+            null,
+            null,
+            false
         );
     }
 
@@ -187,7 +189,9 @@ public class MiqaatService : IMiqaatService
             null,
             m.MiqaatImage1,
             m.MiqaatImage2,
-            m.Notes
+            m.Notes,
+            m.KhidmatDone,
+            m.IsReportSubmitted
         )).ToList();
     }
 
@@ -217,7 +221,9 @@ public class MiqaatService : IMiqaatService
             null,
             miqaat.MiqaatImage1,
             miqaat.MiqaatImage2,
-            miqaat.Notes
+            miqaat.Notes,
+            miqaat.KhidmatDone,
+            miqaat.IsReportSubmitted
         );
     }
 
@@ -280,6 +286,20 @@ public class MiqaatService : IMiqaatService
         if (parsedStatus == AdminApprovalStatus.Approved)
         {
             await _miqaatMemberRepository.UpsertMembersForMiqaat(id, existingMiqaat.Jamaat, AdminApprovalStatus.Pending);
+            
+            // Auto-approve captain who created the miqaat for all days
+            var captain = await _userRepository.GetCaptainByFullNameAsync(existingMiqaat.CaptainName);
+            if (captain != null)
+            {
+                try
+                {
+                    await _miqaatMemberRepository.UpdateMemberMiqaatStatus((int)captain.Id, id, "Approved", null);
+                }
+                catch
+                {
+                    // Ignore if captain is not in miqaat_members (e.g., different jamaat)
+                }
+            }
         }
 
         // Send email notifications when Admin approves/rejects Miqaat
@@ -410,7 +430,9 @@ public class MiqaatService : IMiqaatService
             m.FinalStatus,
             null,
             null,
-            null
+            null,
+            null,
+            false
         )).ToList();
     }
 
@@ -435,7 +457,9 @@ public class MiqaatService : IMiqaatService
             null,
             m.MiqaatImage1,
             m.MiqaatImage2,
-            m.Notes
+            m.Notes,
+            m.KhidmatDone,
+            m.IsReportSubmitted
         )).ToList();
     }
 
@@ -527,7 +551,29 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             finalStatuses.GetValueOrDefault(m.Id),
             m.ItsId,
-            attendanceStatuses.GetValueOrDefault(m.Id)
+            attendanceStatuses.GetValueOrDefault(m.Id),
+            "Enrolled"  // These members have at least one approved day
+        )).ToList();
+    }
+
+    public async Task<List<EnrolledMemberResponse>> GetAllMembersByMiqaatId(long miqaatId)
+    {
+        var membersWithStatus = await _miqaatMemberRepository.GetAllMembersByMiqaatId(miqaatId);
+        var finalStatuses = await _miqaatMemberRepository.GetFinalStatusesByMiqaatId(miqaatId);
+        var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId, 1);
+        
+        return membersWithStatus.Select(ms => new EnrolledMemberResponse(
+            ms.Member.Id,
+            ms.Member.FullName,
+            ms.Member.Email,
+            ms.Member.Contact,
+            ms.Member.Rank,
+            ms.Member.Jamaat,
+            ms.Member.Jamiyat,
+            finalStatuses.GetValueOrDefault(ms.Member.Id),
+            ms.Member.ItsId,
+            attendanceStatuses.GetValueOrDefault(ms.Member.Id),
+            ms.StatusCategory
         )).ToList();
     }
 
@@ -561,7 +607,8 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             "Approved", // All members from this method already have final_status = 'Approved'
             m.ItsId,
-            attendanceStatuses.GetValueOrDefault(m.Id)
+            attendanceStatuses.GetValueOrDefault(m.Id),
+            "Enrolled"  // These members are fully approved
         )).ToList();
     }
     
@@ -636,7 +683,7 @@ public class MiqaatService : IMiqaatService
         throw new Exception("Invalid approval status. Must be 'Pending', 'Approved', or 'Rejected'");
     }
 
-    public async Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes)
+    public async Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes, string? khidmatDone)
     {
         var existingMiqaat = await _miqaatRepository.GetById(miqaatId);
         if (existingMiqaat == null)
@@ -644,7 +691,7 @@ public class MiqaatService : IMiqaatService
             throw new Exception("Miqaat not found");
         }
 
-        await _miqaatRepository.UpdateMiqaatReport(miqaatId, image1, image2, notes);
+        await _miqaatRepository.UpdateMiqaatReport(miqaatId, image1, image2, notes, khidmatDone);
     }
 
     public async Task<bool> HasExistingReport(long miqaatId)
