@@ -40,16 +40,30 @@ public class UserController : BaseController
     [HttpPost]
     public async Task<IActionResult> Add([FromBody] UserCreateViewModel viewmodel)
     {
-        var id = await _userService.Add(viewmodel);
-        return Ok(new { id });
+        try
+        {
+            var id = await _userService.Add(viewmodel);
+            return Ok(new { id });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Edit(int id, [FromBody] UserEditViewModel viewmodel)
     {
-        viewmodel.id = id;
-        await _userService.Edit(viewmodel);
-        return Ok();
+        try
+        {
+            viewmodel.id = id;
+            await _userService.Edit(viewmodel);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpDelete("{id}")]

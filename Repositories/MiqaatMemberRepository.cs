@@ -86,6 +86,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             SELECT 
                 m.`id` AS Id,
                 m.`miqaat_name` AS MiqaatName,
+                m.`miqaat_type` AS MiqaatType,
                 m.`jamaat` AS Jamaat,
                 m.`jamiyat` AS Jamiyat,
                 m.`from_date` AS FromDate,
@@ -590,6 +591,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             SELECT
                 m.`id` AS Id,
                 m.`miqaat_name` AS MiqaatName,
+                m.`miqaat_type` AS MiqaatType,
                 m.`jamaat` AS Jamaat,
                 m.`jamiyat` AS Jamiyat,
                 m.`from_date` AS FromDate,

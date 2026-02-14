@@ -6,6 +6,7 @@ namespace BurhaniGuards.Api.BusinessModel;
 public class MiqaatModel : BaseModel
 {
     public string MiqaatName { get; set; } = string.Empty;
+    public string MiqaatType { get; set; } = "Local"; // "Local" or "International"
     public string Jamaat { get; set; } = string.Empty;
     public string Jamiyat { get; set; } = string.Empty;
     public DateTime FromDate { get; set; }

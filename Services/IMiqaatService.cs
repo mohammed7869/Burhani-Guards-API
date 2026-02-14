@@ -6,6 +6,7 @@ namespace BurhaniGuards.Api.Services;
 public interface IMiqaatService
 {
     Task<MiqaatResponse> Create(CreateMiqaatRequest request, string captainName);
+    Task<MiqaatResponse> CreateByAdmin(CreateMiqaatRequest request, string adminName);
     Task<List<MiqaatResponse>> GetAll();
     Task<MiqaatResponse?> GetById(long id);
     Task Update(long id, UpdateMiqaatRequest request);

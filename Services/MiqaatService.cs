@@ -67,11 +67,16 @@ public class MiqaatService : IMiqaatService
         return days;
     }
 
+    /// <summary>
+    /// Creates a miqaat (used by Captains from Flutter app).
+    /// Captain-created miqaats are always "Local" type and require admin approval.
+    /// </summary>
     public async Task<MiqaatResponse> Create(CreateMiqaatRequest request, string captainName)
     {
         var model = new MiqaatModel
         {
             MiqaatName = request.MiqaatName,
+            MiqaatType = "Local", // Captains can only create Local miqaats
             Jamaat = request.Jamaat,
             Jamiyat = request.Jamiyat,
             FromDate = request.FromDate,
@@ -123,6 +128,7 @@ public class MiqaatService : IMiqaatService
                             <p><strong>Details:</strong></p>
                             <ul>
                                 <li><strong>Miqaat Name:</strong> {request.MiqaatName}</li>
+                                <li><strong>Type:</strong> Local</li>
                                 <li><strong>Jamaat:</strong> {request.Jamaat}</li>
                                 <li><strong>Jamiyat:</strong> {request.Jamiyat}</li>
                                 <li><strong>From Date:</strong> {request.FromDate:yyyy-MM-dd}</li>
@@ -144,55 +150,135 @@ public class MiqaatService : IMiqaatService
             }
         });
 
-        return new MiqaatResponse(
-            createdMiqaat.Id,
-            createdMiqaat.MiqaatName,
-            createdMiqaat.Jamaat,
-            createdMiqaat.Jamiyat,
-            createdMiqaat.FromDate,
-            createdMiqaat.TillDate,
-            createdMiqaat.MiqaatDays,
-            createdMiqaat.VolunteerLimit,
-            createdMiqaat.AboutMiqaat,
-            createdMiqaat.AdminApproval.ToString(),
-            createdMiqaat.CaptainName,
-            ConvertUtcToIst(createdMiqaat.CreatedAt),
-            ConvertUtcToIst(createdMiqaat.UpdatedAt),
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            false
-        );
+        return MapToResponse(createdMiqaat);
+    }
+
+    /// <summary>
+    /// Creates a miqaat by Admin from the web panel.
+    /// Admin-created miqaats are auto-approved. For International miqaats, email is sent to ALL members.
+    /// </summary>
+    public async Task<MiqaatResponse> CreateByAdmin(CreateMiqaatRequest request, string adminName)
+    {
+        var miqaatType = request.MiqaatType ?? "Local";
+        if (miqaatType != "Local" && miqaatType != "International")
+        {
+            throw new Exception("Invalid miqaat type. Must be 'Local' or 'International'");
+        }
+
+        var model = new MiqaatModel
+        {
+            MiqaatName = request.MiqaatName,
+            MiqaatType = miqaatType,
+            Jamaat = miqaatType == "International" ? "" : request.Jamaat,
+            Jamiyat = miqaatType == "International" ? "" : request.Jamiyat,
+            FromDate = request.FromDate,
+            TillDate = request.TillDate,
+            MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate),
+            VolunteerLimit = request.VolunteerLimit,
+            AboutMiqaat = request.AboutMiqaat,
+            AdminApproval = AdminApprovalStatus.Approved, // Auto-approved when admin creates
+            CaptainName = adminName,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var id = await _miqaatRepository.Add(model);
+        var createdMiqaat = await _miqaatRepository.GetById(id);
+
+        if (createdMiqaat == null)
+        {
+            throw new Exception("Failed to create miqaat");
+        }
+
+        // For Local miqaats, seed miqaat_members for the jamaat (same as approval flow)
+        if (miqaatType == "Local" && !string.IsNullOrWhiteSpace(request.Jamaat))
+        {
+            await _miqaatMemberRepository.UpsertMembersForMiqaat(id, request.Jamaat, AdminApprovalStatus.Pending);
+        }
+
+        // Send email notifications
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var typeLabel = miqaatType == "International" ? "International" : "Local";
+                var subject = $"New {typeLabel} Miqaat Created: {request.MiqaatName}";
+
+                var bodyBuilder = $@"
+                    <html>
+                    <body>
+                        <h2>New {typeLabel} Miqaat Created</h2>
+                        <p>A new {typeLabel} Miqaat has been created and is now available.</p>
+                        <p><strong>Details:</strong></p>
+                        <ul>
+                            <li><strong>Miqaat Name:</strong> {request.MiqaatName}</li>
+                            <li><strong>Type:</strong> {typeLabel}</li>
+                            {(miqaatType == "Local" ? $"<li><strong>Jamaat:</strong> {request.Jamaat}</li>" : "")}
+                            {(miqaatType == "Local" ? $"<li><strong>Jamiyat:</strong> {request.Jamiyat}</li>" : "")}
+                            <li><strong>From Date:</strong> {request.FromDate:yyyy-MM-dd}</li>
+                            <li><strong>Till Date:</strong> {request.TillDate:yyyy-MM-dd}</li>
+                            <li><strong>Volunteer Limit:</strong> {request.VolunteerLimit}</li>
+                            <li><strong>Created By:</strong> {adminName}</li>
+                            {(string.IsNullOrWhiteSpace(request.AboutMiqaat) ? "" : $"<li><strong>About:</strong> {request.AboutMiqaat}</li>")}
+                        </ul>
+                        <p>Status: <strong>Approved</strong></p>
+                        <p>Please check the app for enrollment details.</p>
+                    </body>
+                    </html>";
+
+                if (miqaatType == "International")
+                {
+                    // For International miqaats, send email to ALL active members
+                    var allMembers = await _userRepository.List();
+                    var memberEmails = allMembers
+                        .Where(m => !string.IsNullOrWhiteSpace(m.email) && (m.isActive == true || m.isActive == null))
+                        .Select(m => m.email)
+                        .Distinct()
+                        .ToList();
+
+                    if (memberEmails.Any())
+                    {
+                        await _emailService.SendBulkEmailAsync(memberEmails, subject, bodyBuilder);
+                    }
+                }
+                else
+                {
+                    // For Local miqaats, send email to members of that jamaat + admins
+                    var emailList = new List<string>();
+                    
+                    var adminEmails = await _userRepository.GetAdminEmailsAsync();
+                    emailList.AddRange(adminEmails);
+
+                    if (!string.IsNullOrWhiteSpace(request.Jamaat))
+                    {
+                        var members = await _userRepository.GetMembersByJamaatAsync(request.Jamaat);
+                        var memberEmails = members
+                            .Where(m => !string.IsNullOrWhiteSpace(m.Email))
+                            .Select(m => m.Email)
+                            .ToList();
+                        emailList.AddRange(memberEmails);
+                    }
+
+                    emailList = emailList.Distinct().ToList();
+                    if (emailList.Any())
+                    {
+                        await _emailService.SendBulkEmailAsync(emailList, subject, bodyBuilder);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error sending email notification for admin miqaat creation: {ex.Message}");
+            }
+        });
+
+        return MapToResponse(createdMiqaat);
     }
 
     public async Task<List<MiqaatResponse>> GetAll()
     {
         var miqaats = await _miqaatRepository.GetAll();
-        return miqaats.Select(m => new MiqaatResponse(
-            m.Id,
-            m.MiqaatName,
-            m.Jamaat,
-            m.Jamiyat,
-            m.FromDate,
-            m.TillDate,
-            m.MiqaatDays,
-            m.VolunteerLimit,
-            m.AboutMiqaat,
-            m.AdminApproval.ToString(),
-            m.CaptainName,
-            ConvertUtcToIst(m.CreatedAt),
-            ConvertUtcToIst(m.UpdatedAt),
-            null,
-            null,
-            m.MiqaatImage1,
-            m.MiqaatImage2,
-            m.Notes,
-            m.KhidmatDone,
-            m.IsReportSubmitted
-        )).ToList();
+        return miqaats.Select(m => MapToResponse(m, includeReport: true)).ToList();
     }
 
     public async Task<MiqaatResponse?> GetById(long id)
@@ -203,28 +289,7 @@ public class MiqaatService : IMiqaatService
             return null;
         }
 
-        return new MiqaatResponse(
-            miqaat.Id,
-            miqaat.MiqaatName,
-            miqaat.Jamaat,
-            miqaat.Jamiyat,
-            miqaat.FromDate,
-            miqaat.TillDate,
-            miqaat.MiqaatDays,
-            miqaat.VolunteerLimit,
-            miqaat.AboutMiqaat,
-            miqaat.AdminApproval.ToString(),
-            miqaat.CaptainName,
-            ConvertUtcToIst(miqaat.CreatedAt),
-            ConvertUtcToIst(miqaat.UpdatedAt),
-            null,
-            null,
-            miqaat.MiqaatImage1,
-            miqaat.MiqaatImage2,
-            miqaat.Notes,
-            miqaat.KhidmatDone,
-            miqaat.IsReportSubmitted
-        );
+        return MapToResponse(miqaat, includeReport: true);
     }
 
     public async Task Update(long id, UpdateMiqaatRequest request)
@@ -238,6 +303,7 @@ public class MiqaatService : IMiqaatService
         var previousApprovalStatus = existingMiqaat.AdminApproval;
 
         existingMiqaat.MiqaatName = request.MiqaatName;
+        existingMiqaat.MiqaatType = request.MiqaatType ?? existingMiqaat.MiqaatType;
         existingMiqaat.Jamaat = request.Jamaat;
         existingMiqaat.Jamiyat = request.Jamiyat;
         existingMiqaat.FromDate = request.FromDate;
@@ -334,6 +400,7 @@ public class MiqaatService : IMiqaatService
                             <p><strong>Details:</strong></p>
                             <ul>
                                 <li><strong>Miqaat Name:</strong> {existingMiqaat.MiqaatName}</li>
+                                <li><strong>Type:</strong> {existingMiqaat.MiqaatType}</li>
                                 <li><strong>Jamaat:</strong> {existingMiqaat.Jamaat}</li>
                                 <li><strong>Jamiyat:</strong> {existingMiqaat.Jamiyat}</li>
                                 <li><strong>From Date:</strong> {existingMiqaat.FromDate:yyyy-MM-dd}</li>
@@ -348,7 +415,7 @@ public class MiqaatService : IMiqaatService
 
                     await _emailService.SendBulkEmailAsync(emailList, subject, body);
 
-                    // If approved, also send email to all members from the same jamiyat
+                    // If approved, also send email to all members from the same jamaat
                     if (parsedStatus == AdminApprovalStatus.Approved && !string.IsNullOrWhiteSpace(existingMiqaat.Jamaat))
                     {
                         var members = await _userRepository.GetMembersByJamaatAsync(existingMiqaat.Jamaat);
@@ -374,6 +441,7 @@ public class MiqaatService : IMiqaatService
                                     <p><strong>Details:</strong></p>
                                     <ul>
                                         <li><strong>Miqaat Name:</strong> {existingMiqaat.MiqaatName}</li>
+                                        <li><strong>Type:</strong> {existingMiqaat.MiqaatType}</li>
                                         <li><strong>Jamaat:</strong> {existingMiqaat.Jamaat}</li>
                                         <li><strong>Jamiyat:</strong> {existingMiqaat.Jamiyat}</li>
                                         <li><strong>From Date:</strong> {existingMiqaat.FromDate:yyyy-MM-dd}</li>
@@ -415,6 +483,7 @@ public class MiqaatService : IMiqaatService
         return miqaats.Select(m => new MiqaatResponse(
             m.Id,
             m.MiqaatName,
+            m.MiqaatType,
             m.Jamaat,
             m.Jamiyat,
             m.FromDate,
@@ -439,28 +508,7 @@ public class MiqaatService : IMiqaatService
     public async Task<List<MiqaatResponse>> GetMiqaatsByCaptainName(string captainName)
     {
         var miqaats = await _miqaatRepository.GetByCaptainName(captainName);
-        return miqaats.Select(m => new MiqaatResponse(
-            m.Id,
-            m.MiqaatName,
-            m.Jamaat,
-            m.Jamiyat,
-            m.FromDate,
-            m.TillDate,
-            m.MiqaatDays,
-            m.VolunteerLimit,
-            m.AboutMiqaat,
-            m.AdminApproval.ToString(),
-            m.CaptainName,
-            ConvertUtcToIst(m.CreatedAt),
-            ConvertUtcToIst(m.UpdatedAt),
-            null,
-            null,
-            m.MiqaatImage1,
-            m.MiqaatImage2,
-            m.Notes,
-            m.KhidmatDone,
-            m.IsReportSubmitted
-        )).ToList();
+        return miqaats.Select(m => MapToResponse(m, includeReport: true)).ToList();
     }
 
     public async Task<List<MiqaatResponse>> GetMiqaatsForCurrentUser(int userId, int? userRole, string? captainName)
@@ -717,6 +765,36 @@ public class MiqaatService : IMiqaatService
             d.FinalStatus,
             d.MiqaatDate.ToString("dd MMM yyyy")
         )).ToList();
+    }
+
+    /// <summary>
+    /// Helper to convert MiqaatModel to MiqaatResponse consistently
+    /// </summary>
+    private MiqaatResponse MapToResponse(MiqaatModel m, bool includeReport = false)
+    {
+        return new MiqaatResponse(
+            m.Id,
+            m.MiqaatName,
+            m.MiqaatType,
+            m.Jamaat,
+            m.Jamiyat,
+            m.FromDate,
+            m.TillDate,
+            m.MiqaatDays,
+            m.VolunteerLimit,
+            m.AboutMiqaat,
+            m.AdminApproval.ToString(),
+            m.CaptainName,
+            ConvertUtcToIst(m.CreatedAt),
+            ConvertUtcToIst(m.UpdatedAt),
+            m.MemberStatus,
+            m.FinalStatus,
+            includeReport ? m.MiqaatImage1 : null,
+            includeReport ? m.MiqaatImage2 : null,
+            includeReport ? m.Notes : null,
+            includeReport ? m.KhidmatDone : null,
+            includeReport && m.IsReportSubmitted
+        );
     }
 }
 

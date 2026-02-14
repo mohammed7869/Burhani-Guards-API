@@ -44,6 +44,25 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpPost("admin-create")]
+    public async Task<IActionResult> CreateByAdmin([FromBody] CreateMiqaatRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var response = await _miqaatService.CreateByAdmin(request, CurrentUser.fullName);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {

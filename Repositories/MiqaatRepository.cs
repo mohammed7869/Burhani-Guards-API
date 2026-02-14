@@ -19,14 +19,15 @@ public class MiqaatRepository : IMiqaatRepository
         {
             var sql = @"
                 INSERT INTO `local_miqaat` 
-                (`miqaat_name`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `created_at`, `updated_at`)
+                (`miqaat_name`, `miqaat_type`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `created_at`, `updated_at`)
                 VALUES 
-                (@MiqaatName, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @CreatedAt, @UpdatedAt);
+                (@MiqaatName, @MiqaatType, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @CreatedAt, @UpdatedAt);
                 SELECT LAST_INSERT_ID();";
 
             var id = await connection.QuerySingleAsync<long>(sql, new
             {
                 model.MiqaatName,
+                model.MiqaatType,
                 model.Jamaat,
                 model.Jamiyat,
                 FromDate = model.FromDate.Date,
@@ -52,6 +53,7 @@ public class MiqaatRepository : IMiqaatRepository
                 SELECT 
                     `id` AS Id,
                     `miqaat_name` AS MiqaatName,
+                    `miqaat_type` AS MiqaatType,
                     `jamaat` AS Jamaat,
                     `jamiyat` AS Jamiyat,
                     `from_date` AS FromDate,
@@ -84,6 +86,7 @@ public class MiqaatRepository : IMiqaatRepository
                 SELECT 
                     `id` AS Id,
                     `miqaat_name` AS MiqaatName,
+                    `miqaat_type` AS MiqaatType,
                     `jamaat` AS Jamaat,
                     `jamiyat` AS Jamiyat,
                     `from_date` AS FromDate,
@@ -116,6 +119,7 @@ public class MiqaatRepository : IMiqaatRepository
                 UPDATE `local_miqaat`
                 SET 
                     `miqaat_name` = @MiqaatName,
+                    `miqaat_type` = @MiqaatType,
                     `jamaat` = @Jamaat,
                     `jamiyat` = @Jamiyat,
                     `from_date` = @FromDate,
@@ -132,6 +136,7 @@ public class MiqaatRepository : IMiqaatRepository
             {
                 model.Id,
                 model.MiqaatName,
+                model.MiqaatType,
                 model.Jamaat,
                 model.Jamiyat,
                 FromDate = model.FromDate.Date,
@@ -163,6 +168,7 @@ public class MiqaatRepository : IMiqaatRepository
                 SELECT 
                     `id` AS Id,
                     `miqaat_name` AS MiqaatName,
+                    `miqaat_type` AS MiqaatType,
                     `jamaat` AS Jamaat,
                     `jamiyat` AS Jamiyat,
                     `from_date` AS FromDate,

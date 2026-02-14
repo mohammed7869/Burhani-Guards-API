@@ -3,6 +3,7 @@ namespace BurhaniGuards.Api.Contracts.Responses;
 public sealed record MiqaatResponse(
     long Id,
     string MiqaatName,
+    string MiqaatType, // "Local" or "International"
     string Jamaat,
     string Jamiyat,
     DateTime FromDate,
@@ -22,5 +23,4 @@ public sealed record MiqaatResponse(
     string? KhidmatDone,
     bool IsReportSubmitted
 );
-
 
