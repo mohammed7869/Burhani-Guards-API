@@ -77,7 +77,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {
         try
@@ -95,7 +95,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpPut("{id}")]
+    [HttpPut("{id:long}")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateMiqaatRequest request)
     {
         if (CurrentUser == null)
@@ -114,7 +114,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpPatch("{id}/approval")]
+    [HttpPatch("{id:long}/approval")]
     public async Task<IActionResult> UpdateApprovalStatus(long id, [FromBody] UpdateApprovalRequest request)
     {
         if (CurrentUser == null)
@@ -133,7 +133,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:long}")]
     public async Task<IActionResult> Delete(long id)
     {
         if (CurrentUser == null)
@@ -233,7 +233,26 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpPatch("{miqaatId}/member/{memberId}/status")]
+    [HttpGet("admin-points")]
+    public async Task<IActionResult> GetAdminPoints()
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var members = await _miqaatService.GetAllMemberPointsForAdmin();
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPatch("{miqaatId:long}/member/{memberId:int}/status")]
     public async Task<IActionResult> UpdateMemberMiqaatStatus(long miqaatId, int memberId, [FromBody] UpdateMemberMiqaatStatusRequest request)
     {
         if (CurrentUser == null)
@@ -268,7 +287,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpGet("{miqaatId}/enrolled-members")]
+    [HttpGet("{miqaatId:long}/enrolled-members")]
     public async Task<IActionResult> GetEnrolledMembers(long miqaatId)
     {
         if (CurrentUser == null)
@@ -293,7 +312,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpGet("{miqaatId}/all-members")]
+    [HttpGet("{miqaatId:long}/all-members")]
     public async Task<IActionResult> GetAllMembersByMiqaatId(long miqaatId)
     {
         if (CurrentUser == null)
@@ -318,7 +337,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpGet("{miqaatId}/approved-members-for-attendance")]
+    [HttpGet("{miqaatId:long}/approved-members-for-attendance")]
     public async Task<IActionResult> GetApprovedMembersForAttendance(long miqaatId, [FromQuery] int day = 1)
     {
         if (CurrentUser == null)
@@ -343,7 +362,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpPatch("{miqaatId}/member/{memberId}/final-status")]
+    [HttpPatch("{miqaatId:long}/member/{memberId:int}/final-status")]
     public async Task<IActionResult> UpdateFinalStatus(long miqaatId, int memberId, [FromBody] UpdateMemberMiqaatStatusRequest request)
     {
         if (CurrentUser == null)
@@ -368,7 +387,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpGet("{miqaatId}/member/{memberId}/enrollment-days")]
+    [HttpGet("{miqaatId:long}/member/{memberId:int}/enrollment-days")]
     public async Task<IActionResult> GetMemberEnrollmentDays(long miqaatId, int memberId)
     {
         if (CurrentUser == null)
@@ -393,7 +412,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpPost("{miqaatId}/mark-attendance")]
+    [HttpPost("{miqaatId:long}/mark-attendance")]
     public async Task<IActionResult> MarkAttendance(long miqaatId, [FromBody] MarkAttendanceRequest request)
     {
         if (CurrentUser == null)
@@ -418,7 +437,7 @@ public class MiqaatController : BaseController
         }
     }
 
-    [HttpPost("{miqaatId}/report")]
+    [HttpPost("{miqaatId:long}/report")]
     public async Task<IActionResult> SubmitMiqaatReport(long miqaatId, [FromForm] SubmitMiqaatReportRequest request)
     {
         if (CurrentUser == null)

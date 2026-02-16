@@ -582,6 +582,18 @@ public class MiqaatService : IMiqaatService
         );
     }
 
+    public async Task<List<AdminMemberPointsResponse>> GetAllMemberPointsForAdmin()
+    {
+        var members = await _miqaatMemberRepository.GetAllMemberPoints();
+        return members.Select(m => new AdminMemberPointsResponse(
+            m.Id,
+            m.FullName,
+            m.ItsId,
+            m.Jamaat,
+            m.TotalPoints
+        )).ToList();
+    }
+
     public async Task<List<EnrolledMemberResponse>> GetEnrolledMembersByMiqaatId(long miqaatId)
     {
         var members = await _miqaatMemberRepository.GetEnrolledMembersByMiqaatId(miqaatId);

@@ -6,3 +6,11 @@ public sealed record MemberPointsResponse(
     string? ItsId,
     int TotalPoints
 );
+
+public sealed record AdminMemberPointsResponse(
+    long MemberId,
+    string FullName,
+    string? ItsId,
+    string? Jamaat,
+    int TotalPoints
+);

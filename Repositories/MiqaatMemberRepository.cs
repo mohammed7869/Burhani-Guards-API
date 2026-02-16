@@ -11,6 +11,7 @@ public interface IMiqaatMemberRepository
     Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days);
     Task<List<MemberPointsModel>> GetMemberPointsByJamaat(string jamaat);
     Task<MemberPointsModel> GetMemberPointsByMemberId(int memberId);
+    Task<List<MemberPointsModel>> GetAllMemberPoints();
     Task<List<MemberModel>> GetEnrolledMembersByMiqaatId(long miqaatId);
     Task<List<(MemberModel Member, string StatusCategory)>> GetAllMembersByMiqaatId(long miqaatId);
     Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day);
@@ -221,6 +222,35 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         }
 
         return member;
+    }
+
+    public async Task<List<MemberPointsModel>> GetAllMemberPoints()
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                m.`id` AS Id,
+                m.`full_name` AS FullName,
+                m.`its_id` AS ItsId,
+                m.`jamaat` AS Jamaat,
+                IFNULL(SUM(CASE 
+                    WHEN lm.`admin_approval` = 'Approved'
+                     AND mm.`status` = 'Approved'
+                     AND mm.`final_status` = 'Approved'
+                    THEN IFNULL(mm.`points`, 0)
+                    ELSE 0
+                END), 0) AS TotalPoints
+            FROM `members` m
+            LEFT JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            LEFT JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
+            WHERE m.`is_active` = 1
+            GROUP BY m.`id`, m.`full_name`, m.`its_id`, m.`jamaat`
+            ORDER BY TotalPoints DESC, m.`full_name` ASC
+        """;
+
+        var result = await connection.QueryAsync<MemberPointsModel>(sql);
+        return result.ToList();
     }
 
     public async Task<List<MemberModel>> GetEnrolledMembersByMiqaatId(long miqaatId)

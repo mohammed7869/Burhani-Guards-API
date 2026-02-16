@@ -18,6 +18,7 @@ public interface IMiqaatService
     Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days);
     Task<List<MemberPointsResponse>> GetMemberPointsByJamaat(string jamaat);
     Task<MemberPointsResponse> GetMemberPointsByMemberId(int memberId);
+    Task<List<AdminMemberPointsResponse>> GetAllMemberPointsForAdmin();
     Task<List<EnrolledMemberResponse>> GetEnrolledMembersByMiqaatId(long miqaatId);
     Task<List<EnrolledMemberResponse>> GetAllMembersByMiqaatId(long miqaatId);
     Task<List<EnrolledMemberResponse>> GetApprovedMembersForAttendance(long miqaatId, int day);

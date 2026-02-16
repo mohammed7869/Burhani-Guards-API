@@ -111,17 +111,23 @@ public class UserRepository : IUserRepository
     {
         using (var connection = _context.CreateConnection())
         {
-            var userModel = await connection.GetAsync<UserModel>(id);
+            // Use raw SQL instead of Dapper.Contrib to avoid property-to-column name mismatch
+            // (e.g., ItsId vs its_id, FullName vs full_name)
+            var checkSql = @"SELECT COUNT(1) FROM `members` WHERE `id` = @Id AND `is_active` = 1";
+            var exists = await connection.ExecuteScalarAsync<int>(checkSql, new { Id = id });
 
-            if (userModel == null)
+            if (exists == 0)
             {
                 throw new Exception("User not found");
             }
 
             // Soft delete
-            userModel.IsActive = false;
-            userModel.UpdatedAt = DateTime.UtcNow;
-            await connection.UpdateAsync(userModel);
+            var sql = @"
+                UPDATE `members` 
+                SET `is_active` = 0, 
+                    `updated_at` = CURRENT_TIMESTAMP
+                WHERE `id` = @Id";
+            await connection.ExecuteAsync(sql, new { Id = id });
         }
     }
 
@@ -281,7 +287,33 @@ public class UserRepository : IUserRepository
     {
         using (var connection = _context.CreateConnection())
         {
-            var user = await connection.GetAsync<UserModel>(viewmodel.id);
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS Rank,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `password_hash` AS PasswordHash,
+                    `new_password_hash` AS NewPasswordHash,
+                    `is_active` AS IsActive,
+                    `is_approved` AS IsApproved,
+                    `created_by` AS CreatedBy,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `members`
+                WHERE `id` = @Id AND `is_active` = 1
+            ";
+            var user = await connection.QueryFirstOrDefaultAsync<UserModel>(sql, new { Id = viewmodel.id });
 
             if (user == null)
             {
@@ -301,9 +333,10 @@ public class UserRepository : IUserRepository
                 throw new Exception("Cannot update");
             }
 
-            var user = await connection.GetAsync<UserModel>(viewmodel.Id);
+            var checkSql = @"SELECT COUNT(1) FROM `members` WHERE `id` = @Id AND `is_active` = 1";
+            var userExists = await connection.ExecuteScalarAsync<int>(checkSql, new { Id = viewmodel.Id });
 
-            if (user == null)
+            if (userExists == 0)
             {
                 throw new Exception("User not found");
             }
@@ -317,12 +350,21 @@ public class UserRepository : IUserRepository
                 throw new Exception("Email already registered. Please try with another email");
             }
 
-            user.FullName = viewmodel.FullName;
-            user.Email = viewmodel.Email;
-            user.Contact = viewmodel.Contact;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            await connection.UpdateAsync(user);
+            var updateSql = @"
+                UPDATE `members` 
+                SET `full_name` = @FullName,
+                    `email` = @Email,
+                    `contact` = @Contact,
+                    `updated_at` = CURRENT_TIMESTAMP
+                WHERE `id` = @Id AND `is_active` = 1
+            ";
+            await connection.ExecuteAsync(updateSql, new 
+            { 
+                FullName = viewmodel.FullName,
+                Email = viewmodel.Email,
+                Contact = viewmodel.Contact,
+                Id = viewmodel.Id
+            });
         }
     }
 
