@@ -13,6 +13,7 @@ public sealed record AuthResponse(
     string? Gender,
     int? Age,
     string? Contact,
+    DateTime? DateOfBirth,
     string Role,
     string Token,
     bool RequiresPasswordChange = false,

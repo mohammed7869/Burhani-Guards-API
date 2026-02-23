@@ -78,6 +78,7 @@ public sealed class CaptainAuthService : ICaptainAuthService
             Gender: null,
             Age: null,
             Contact: null,
+            DateOfBirth: null,
             Role: "captain",
             Token: token,
             RequiresPasswordChange: requiresPasswordChange

@@ -54,6 +54,7 @@ public sealed class MemberAuthService : IMemberAuthService
             Gender: null,
             Age: null,
             Contact: null,
+            DateOfBirth: null,
             Role: member.Role,
             Token: token,
             RequiresPasswordChange: false

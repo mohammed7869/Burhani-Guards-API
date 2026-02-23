@@ -44,6 +44,9 @@ public class UserModel : BaseModel
     [Column("contact")]
     public string? Contact { get; set; }
 
+    [Column("date_of_birth")]
+    public DateTime? DateOfBirth { get; set; }
+
     [Column("password_hash")]
     public string? PasswordHash { get; set; }
 

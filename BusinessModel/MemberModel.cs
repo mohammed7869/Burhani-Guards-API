@@ -18,6 +18,7 @@ public class MemberModel : BaseModel
     public string Email { get; set; } = string.Empty;
     public int? Age { get; set; }
     public string? Contact { get; set; }
+    public DateTime? DateOfBirth { get; set; }
     public string? PasswordHash { get; set; }
     public string? NewPasswordHash { get; set; }
     public string? OtpCode { get; set; }

@@ -81,6 +81,7 @@ public class UserService : IUserService
             Gender = viewmodel.gender,
             Age = viewmodel.age,
             Contact = viewmodel.contact,
+            DateOfBirth = viewmodel.dateOfBirth,
             PasswordHash = !string.IsNullOrWhiteSpace(viewmodel.password) 
                 ? BCrypt.Net.BCrypt.HashPassword(viewmodel.password) 
                 : null,
@@ -112,7 +113,8 @@ public class UserService : IUserService
             Jamaat = viewmodel.jamaat,
             Gender = viewmodel.gender,
             Age = viewmodel.age,
-            Contact = viewmodel.contact
+            Contact = viewmodel.contact,
+            DateOfBirth = viewmodel.dateOfBirth
         };
 
         await _userRepository.Edit(user);
@@ -137,12 +139,20 @@ public class UserService : IUserService
 
     public async Task EditProfile(UserEditViewModel viewmodel)
     {
+        // Fetch current user data first to avoid overwriting fields with empty values
+        var existingUser = await _userRepository.SelectUser(viewmodel.id);
+        if (existingUser == null)
+        {
+            throw new Exception("User not found");
+        }
+
         var user = new UserModel
         {
             Id = viewmodel.id,
-            FullName = viewmodel.fullName,
-            Email = viewmodel.email,
-            Contact = viewmodel.contact
+            FullName = !string.IsNullOrWhiteSpace(viewmodel.fullName) ? viewmodel.fullName : existingUser.FullName,
+            Email = !string.IsNullOrWhiteSpace(viewmodel.email) ? viewmodel.email : existingUser.Email,
+            Contact = !string.IsNullOrWhiteSpace(viewmodel.contact) ? viewmodel.contact : existingUser.Contact,
+            DateOfBirth = viewmodel.dateOfBirth ?? existingUser.DateOfBirth
         };
 
         await _userRepository.EditProfile(user);
@@ -373,6 +383,7 @@ public class UserService : IUserService
             gender = user.Gender,
             age = user.Age,
             contact = user.Contact,
+            dateOfBirth = user.DateOfBirth,
             passwordHash = user.PasswordHash,
             newPasswordHash = user.NewPasswordHash,
             isActive = user.IsActive,

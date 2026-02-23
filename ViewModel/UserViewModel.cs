@@ -19,6 +19,7 @@ public class UserViewModel
     public string email { get; set; } = string.Empty;
     public int? age { get; set; }
     public string? contact { get; set; }
+    public DateTime? dateOfBirth { get; set; }
     public string? passwordHash { get; set; }
     public string? newPasswordHash { get; set; }
     public bool isActive { get; set; } = true;
@@ -43,6 +44,7 @@ public class UserListViewModel
     public string email { get; set; } = string.Empty;
     public int? age { get; set; }
     public string? contact { get; set; }
+    public DateTime? dateOfBirth { get; set; }
     public bool isActive { get; set; }
     public bool isApproved { get; set; }
     public DateTime createdAt { get; set; }
@@ -74,6 +76,7 @@ public class UserCreateViewModel
     public string? gender { get; set; }
     public int? age { get; set; }
     public string? contact { get; set; }
+    public DateTime? dateOfBirth { get; set; }
     public string? password { get; set; }
     public bool? isApproved { get; set; }
 }
@@ -91,5 +94,6 @@ public class UserEditViewModel
     public string? gender { get; set; }
     public int? age { get; set; }
     public string? contact { get; set; }
+    public DateTime? dateOfBirth { get; set; }
 }
 

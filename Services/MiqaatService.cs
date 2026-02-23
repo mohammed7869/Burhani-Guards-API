@@ -329,6 +329,15 @@ public class MiqaatService : IMiqaatService
         if (newApprovalStatus.HasValue && newApprovalStatus.Value == AdminApprovalStatus.Approved)
         {
             await _miqaatMemberRepository.UpsertMembersForMiqaat(id, existingMiqaat.Jamaat, AdminApprovalStatus.Pending);
+
+            // Auto-approve captain who created the miqaat for all days
+            var captain = await _userRepository.GetCaptainByFullNameAsync(existingMiqaat.CaptainName);
+            if (captain != null)
+            {
+                // Upsert captain rows as Approved (in case UpsertMembersForMiqaat added them as Pending
+                // or captain belongs to a different jamaat and wasn't seeded at all)
+                await _miqaatMemberRepository.UpsertCaptainForMiqaat((int)captain.Id, id, AdminApprovalStatus.Approved);
+            }
         }
     }
 
@@ -352,19 +361,14 @@ public class MiqaatService : IMiqaatService
         if (parsedStatus == AdminApprovalStatus.Approved)
         {
             await _miqaatMemberRepository.UpsertMembersForMiqaat(id, existingMiqaat.Jamaat, AdminApprovalStatus.Pending);
-            
-            // Auto-approve captain who created the miqaat for all days
+
+            // Auto-approve captain who created the miqaat for all days.
+            // We use UpsertCaptainForMiqaat which handles INSERT ... ON DUPLICATE KEY UPDATE,
+            // so it works regardless of whether the captain is in the same jamaat or not.
             var captain = await _userRepository.GetCaptainByFullNameAsync(existingMiqaat.CaptainName);
             if (captain != null)
             {
-                try
-                {
-                    await _miqaatMemberRepository.UpdateMemberMiqaatStatus((int)captain.Id, id, "Approved", null);
-                }
-                catch
-                {
-                    // Ignore if captain is not in miqaat_members (e.g., different jamaat)
-                }
+                await _miqaatMemberRepository.UpsertCaptainForMiqaat((int)captain.Id, id, AdminApprovalStatus.Approved);
             }
         }
 
@@ -672,7 +676,7 @@ public class MiqaatService : IMiqaatService
         )).ToList();
     }
     
-    public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus)
+    public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days)
     {
         // Validate final status
         if (finalStatus != "Approved" && finalStatus != "Rejected")
@@ -680,7 +684,7 @@ public class MiqaatService : IMiqaatService
             throw new Exception("Invalid final status. Must be 'Approved' or 'Rejected'");
         }
 
-        await _miqaatMemberRepository.UpdateFinalStatus(memberId, miqaatId, finalStatus);
+        await _miqaatMemberRepository.UpdateFinalStatus(memberId, miqaatId, finalStatus, days);
     }
 
     public async Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds)
@@ -808,5 +812,152 @@ public class MiqaatService : IMiqaatService
             includeReport && m.IsReportSubmitted
         );
     }
+
+    public async Task<MiqaatInsightsResponse> GetInsights()
+    {
+        var overallTask = _miqaatMemberRepository.GetMiqaatOverallStatsAsync();
+        var detailTask = _miqaatMemberRepository.GetMiqaatDetailStatsAsync();
+        var jamaatTask = _miqaatMemberRepository.GetJamaatInsightsAsync();
+        var trendTask = _miqaatMemberRepository.GetMonthlyTrendAsync();
+
+        await Task.WhenAll(overallTask, detailTask, jamaatTask, trendTask);
+
+        var overall = overallTask.Result;
+        var details = detailTask.Result;
+        var jamaats = jamaatTask.Result;
+        var trend = trendTask.Result;
+
+        var overallStats = new MiqaatOverallStats(
+            overall.TotalMiqaats,
+            overall.ApprovedMiqaats,
+            overall.PendingMiqaats,
+            overall.RejectedMiqaats,
+            overall.TotalEnrolled,
+            overall.TotalAttended,
+            overall.TotalLocal,
+            overall.TotalInternational,
+            overall.ReportsSubmitted
+        );
+
+        var miqaatItems = details.Select(d => new MiqaatInsightItem(
+            d.Id,
+            d.MiqaatName,
+            d.MiqaatType,
+            d.Jamaat,
+            d.Jamiyat,
+            d.FromDate.ToString("yyyy-MM-dd"),
+            d.TillDate.ToString("yyyy-MM-dd"),
+            d.MiqaatDays,
+            d.VolunteerLimit,
+            d.AdminApproval,
+            d.CaptainName,
+            d.TotalEnrolled,
+            d.TotalApproved,
+            d.TotalAttended,
+            d.TotalPending,
+            d.TotalRejected,
+            d.IsReportSubmitted
+        )).ToList();
+
+        var jamaatItems = jamaats.Select(j => new JamaatInsightItem(
+            j.Jamaat,
+            j.TotalMiqaats,
+            j.ApprovedMiqaats,
+            j.TotalEnrolled,
+            j.TotalAttended
+        )).ToList();
+
+        var monthlyTrend = trend.Select(t => new MonthlyMiqaatCount(t.MonthLabel, t.Count)).ToList();
+
+        return new MiqaatInsightsResponse(overallStats, miqaatItems, jamaatItems, monthlyTrend);
+    }
+
+    public async Task<MiqaatDetailedInsightsResponse> GetMiqaatDetailedInsights(long miqaatId)
+    {
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+            throw new Exception("Miqaat not found");
+
+        var rows = await _miqaatMemberRepository.GetAllMemberDayRowsForMiqaatAsync(miqaatId);
+
+        // ── Day-wise stats ──────────────────────────────────────────────────────
+        var dayStats = Enumerable.Range(1, miqaat.MiqaatDays).Select(day =>
+        {
+            var dayRows = rows.Where(r => r.Day == day).ToList();
+            var dayDate = miqaat.FromDate.AddDays(day - 1).ToString("dd MMM yyyy");
+            return new MiqaatDayStat(
+                day,
+                dayDate,
+                dayRows.Count(r => r.Status == "Approved"),
+                dayRows.Count(r => r.Status == "Pending"),
+                dayRows.Count(r => r.Status == "Rejected"),
+                dayRows.Count(r => r.IsAttended)
+            );
+        }).ToList();
+
+        // ── Member-day matrix ────────────────────────────────────────────────────
+        var memberGroups = rows
+            .GroupBy(r => r.MemberId)
+            .Select(g =>
+            {
+                var first = g.First();
+                var dayEntries = g.OrderBy(r => r.Day).Select(r => new MiqaatMemberDayEntry(
+                    r.Day,
+                    miqaat.FromDate.AddDays(r.Day - 1).ToString("dd MMM yyyy"),
+                    r.Status,
+                    r.FinalStatus,
+                    r.IsAttended
+                )).ToList();
+
+                return new MiqaatMemberDayDetail(
+                    first.MemberId,
+                    first.FullName,
+                    first.ItsId,
+                    first.Rank,
+                    first.Jamaat,
+                    first.Contact,
+                    dayEntries
+                );
+            })
+            .OrderBy(m => m.FullName)
+            .ToList();
+
+        // ── Summary counts ───────────────────────────────────────────────────────
+        var uniqueMemberIds = rows.Select(r => r.MemberId).Distinct().ToHashSet();
+        int totalUniqueMembers = uniqueMemberIds.Count;
+        int totalEnrolledMembers = rows
+            .Where(r => r.Status == "Approved")
+            .Select(r => r.MemberId)
+            .Distinct()
+            .Count();
+        int totalApprovedSlots = rows.Count(r => r.Status == "Approved");
+        int totalAttendedSlots = rows.Count(r => r.IsAttended);
+        int totalPendingSlots  = rows.Count(r => r.Status == "Pending");
+        int totalRejectedSlots = rows.Count(r => r.Status == "Rejected");
+
+        var summary = new MiqaatDetailSummary(
+            miqaat.Id,
+            miqaat.MiqaatName,
+            miqaat.MiqaatType,
+            miqaat.Jamaat ?? "",
+            miqaat.Jamiyat ?? "",
+            miqaat.FromDate.ToString("yyyy-MM-dd"),
+            miqaat.TillDate.ToString("yyyy-MM-dd"),
+            miqaat.MiqaatDays,
+            miqaat.VolunteerLimit,
+            miqaat.AdminApproval.ToString(),
+            miqaat.CaptainName ?? "",
+            miqaat.IsReportSubmitted,
+            totalUniqueMembers,
+            totalEnrolledMembers,
+            totalApprovedSlots,
+            totalAttendedSlots,
+            totalPendingSlots,
+            totalRejectedSlots
+        );
+
+        return new MiqaatDetailedInsightsResponse(summary, dayStats, memberGroups);
+    }
 }
+
 

@@ -77,6 +77,34 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpGet("insights")]
+    public async Task<IActionResult> GetInsights()
+    {
+        try
+        {
+            var insights = await _miqaatService.GetInsights();
+            return Ok(insights);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id:long}/detailed-insights")]
+    public async Task<IActionResult> GetDetailedInsights(long id)
+    {
+        try
+        {
+            var insights = await _miqaatService.GetMiqaatDetailedInsights(id);
+            return Ok(insights);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {
@@ -378,7 +406,17 @@ public class MiqaatController : BaseController
 
         try
         {
-            await _miqaatService.UpdateFinalStatus(memberId, miqaatId, request.Status);
+            var days = request.Days?
+                .Where(d => d > 0)
+                .Distinct()
+                .ToList();
+
+            if ((days == null || days.Count == 0) && request.Day.HasValue && request.Day.Value > 0)
+            {
+                days = new List<int> { request.Day.Value };
+            }
+
+            await _miqaatService.UpdateFinalStatus(memberId, miqaatId, request.Status, days);
             return Ok(new { message = "Final status updated successfully" });
         }
         catch (Exception ex)
@@ -395,10 +433,10 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can view member enrollment days
-        if (CurrentUser.roles != 2)
+        // Allow both Captains and the member themselves to view enrollment days
+        if (CurrentUser.roles != 2 && CurrentUser.id != memberId)
         {
-            return Forbid("Only Captains can view member enrollment days");
+            return Forbid("You can only view your own enrollment days");
         }
 
         try

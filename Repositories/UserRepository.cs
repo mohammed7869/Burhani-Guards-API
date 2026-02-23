@@ -70,14 +70,14 @@ public class UserRepository : IUserRepository
                 (
                     `its_id`, `full_name`, `email`, `rank`, `roles`, 
                     `jamiyat`, `jamaat`, `jamiyat_id`, `jamaat_id`, 
-                    `gender`, `age`, `contact`, `password_hash`, 
+                    `gender`, `age`, `contact`, `date_of_birth`, `password_hash`, 
                     `is_active`, `is_approved`, `created_by`, `created_at`, `updated_at`
                 )
                 VALUES 
                 (
                     @ItsId, @FullName, @Email, @Rank, @Roles,
                     @Jamiyat, @Jamaat, @JamiyatId, @JamaatId,
-                    @Gender, @Age, @Contact, @PasswordHash,
+                    @Gender, @Age, @Contact, @DateOfBirth, @PasswordHash,
                     @IsActive, @IsApproved, @CreatedBy, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 );
                 SELECT LAST_INSERT_ID();
@@ -97,6 +97,7 @@ public class UserRepository : IUserRepository
                 Gender = viewmodel.Gender,
                 Age = viewmodel.Age,
                 Contact = viewmodel.Contact,
+                DateOfBirth = viewmodel.DateOfBirth,
                 PasswordHash = viewmodel.PasswordHash,
                 IsActive = viewmodel.IsActive,
                 IsApproved = viewmodel.IsApproved,
@@ -181,6 +182,7 @@ public class UserRepository : IUserRepository
                     `gender` = @Gender,
                     `age` = @Age,
                     `contact` = @Contact,
+                    `date_of_birth` = @DateOfBirth,
                     `updated_at` = CURRENT_TIMESTAMP
                 WHERE `id` = @Id
             ";
@@ -199,7 +201,8 @@ public class UserRepository : IUserRepository
                 JamaatId = viewmodel.JamaatId,
                 Gender = viewmodel.Gender,
                 Age = viewmodel.Age,
-                Contact = viewmodel.Contact
+                Contact = viewmodel.Contact,
+                DateOfBirth = viewmodel.DateOfBirth
             });
 
             if (rowsAffected == 0)
@@ -225,6 +228,7 @@ public class UserRepository : IUserRepository
                 u.`email`,
                 u.`age`,
                 u.`contact`,
+                u.`date_of_birth` AS dateOfBirth,
                 u.`is_active` AS isActive,
                 u.`is_approved` AS isApproved,
                 u.`created_at` AS createdAt,
@@ -262,6 +266,7 @@ public class UserRepository : IUserRepository
                     `email` AS Email,
                     `age` AS Age,
                     `contact` AS Contact,
+                    `date_of_birth` AS DateOfBirth,
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
@@ -303,6 +308,7 @@ public class UserRepository : IUserRepository
                     `email` AS Email,
                     `age` AS Age,
                     `contact` AS Contact,
+                    `date_of_birth` AS DateOfBirth,
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
@@ -355,6 +361,7 @@ public class UserRepository : IUserRepository
                 SET `full_name` = @FullName,
                     `email` = @Email,
                     `contact` = @Contact,
+                    `date_of_birth` = @DateOfBirth,
                     `updated_at` = CURRENT_TIMESTAMP
                 WHERE `id` = @Id AND `is_active` = 1
             ";
@@ -363,6 +370,7 @@ public class UserRepository : IUserRepository
                 FullName = viewmodel.FullName,
                 Email = viewmodel.Email,
                 Contact = viewmodel.Contact,
+                DateOfBirth = viewmodel.DateOfBirth,
                 Id = viewmodel.Id
             });
         }
@@ -389,6 +397,7 @@ public class UserRepository : IUserRepository
                     `email` AS Email,
                     `age` AS Age,
                     `contact` AS Contact,
+                    `date_of_birth` AS DateOfBirth,
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
@@ -426,6 +435,7 @@ public class UserRepository : IUserRepository
                     `email` AS Email,
                     `age` AS Age,
                     `contact` AS Contact,
+                    `date_of_birth` AS DateOfBirth,
                     `password_hash` AS PasswordHash,
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
@@ -624,6 +634,7 @@ public class UserRepository : IUserRepository
                     `email` AS Email,
                     `age` AS Age,
                     `contact` AS Contact,
+                    `date_of_birth` AS DateOfBirth,
                     `is_active` AS IsActive,
                     `is_approved` AS IsApproved,
                     `created_at` AS CreatedAt,
@@ -653,6 +664,7 @@ public class UserRepository : IUserRepository
                 Email = row.Email as string ?? string.Empty,
                 Age = row.Age as int?,
                 Contact = row.Contact as string,
+                DateOfBirth = row.DateOfBirth as DateTime?,
                 IsActive = row.IsActive as bool? ?? true,
                 IsApproved = row.IsApproved as bool? ?? true,
                 CreatedAt = row.CreatedAt as DateTime? ?? DateTime.UtcNow,

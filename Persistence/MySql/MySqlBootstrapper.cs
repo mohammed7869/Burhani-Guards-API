@@ -314,6 +314,16 @@ public sealed class MySqlBootstrapper
         }
         catch { } // Migration might fail, column might not exist or already be correct type
 
+        // Migration: Add date_of_birth column if it doesn't exist
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                ALTER TABLE `members`
+                ADD COLUMN `date_of_birth` DATE NULL AFTER `contact`;
+                """);
+        }
+        catch { } // Column might already exist
+
         // Seed default captain if not exists
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(CaptainDefaults.Password);
         await dbConnection.ExecuteAsync("""

@@ -7,6 +7,7 @@ namespace BurhaniGuards.Api.Repositories;
 public interface IMiqaatMemberRepository
 {
     Task UpsertMembersForMiqaat(long miqaatId, string jamaat, AdminApprovalStatus status);
+    Task UpsertCaptainForMiqaat(int captainMemberId, long miqaatId, AdminApprovalStatus status);
     Task<List<MiqaatModel>> GetMiqaatsByMemberId(int memberId);
     Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days);
     Task<List<MemberPointsModel>> GetMemberPointsByJamaat(string jamaat);
@@ -17,10 +18,30 @@ public interface IMiqaatMemberRepository
     Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task<Dictionary<long, string?>> GetFinalStatusesByMiqaatId(long miqaatId);
     Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
-    Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus);
+    Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId);
     Task<List<MemberEnrollmentDayModel>> GetMemberEnrollmentDays(long miqaatId, int memberId);
+    Task<(
+        int TotalMiqaats, int ApprovedMiqaats, int PendingMiqaats, int RejectedMiqaats,
+        int TotalEnrolled, int TotalAttended,
+        int TotalLocal, int TotalInternational, int ReportsSubmitted
+    )> GetMiqaatOverallStatsAsync();
+    Task<List<(long Id, string MiqaatName, string MiqaatType, string Jamaat, string Jamiyat,
+        DateTime FromDate, DateTime TillDate, int MiqaatDays, int VolunteerLimit,
+        string AdminApproval, string CaptainName, bool IsReportSubmitted,
+        int TotalEnrolled, int TotalApproved, int TotalAttended, int TotalPending, int TotalRejected)>> GetMiqaatDetailStatsAsync();
+    Task<List<(string Jamaat, int TotalMiqaats, int ApprovedMiqaats, int TotalEnrolled, int TotalAttended)>> GetJamaatInsightsAsync();
+    Task<List<(string MonthLabel, int Count)>> GetMonthlyTrendAsync();
+
+    /// <summary>
+    /// Returns every miqaat_members row for a specific miqaat joined with member info.
+    /// Used to build day-wise stats and member-day-matrix.
+    /// </summary>
+    Task<List<(
+        long MemberId, string FullName, string ItsId, string Rank, string Jamaat, string Contact,
+        int Day, string Status, string? FinalStatus, bool IsAttended
+    )>> GetAllMemberDayRowsForMiqaatAsync(long miqaatId);
 }
 
 public class MiqaatMemberRepository : IMiqaatMemberRepository
@@ -79,6 +100,42 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         await connection.ExecuteAsync(insertSql, parameters);
     }
 
+    public async Task UpsertCaptainForMiqaat(int captainMemberId, long miqaatId, AdminApprovalStatus status)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Get the miqaat duration so we can create one row per day for the captain
+        const string miqaatDaysSql = """
+            SELECT IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays
+            FROM `local_miqaat`
+            WHERE `id` = @MiqaatId
+        """;
+
+        var miqaatDays = await connection.QueryFirstOrDefaultAsync<int>(miqaatDaysSql, new { MiqaatId = miqaatId });
+        if (miqaatDays < 1)
+        {
+            miqaatDays = 1;
+        }
+
+        // INSERT ... ON DUPLICATE KEY UPDATE so existing rows get their status promoted to Approved,
+        // and missing rows (captain added after initial seed) are inserted fresh.
+        const string upsertSql = """
+            INSERT INTO `miqaat_members` (`member_id`, `miqaat_id`, `miqaat_day`, `status`)
+            VALUES (@MemberId, @MiqaatId, @Day, @Status)
+            ON DUPLICATE KEY UPDATE `status` = VALUES(`status`);
+        """;
+
+        var parameters = Enumerable.Range(1, miqaatDays).Select(day => new
+        {
+            MemberId = captainMemberId,
+            MiqaatId = miqaatId,
+            Day = day,
+            Status = status.ToString()
+        });
+
+        await connection.ExecuteAsync(upsertSql, parameters);
+    }
+
     public async Task<List<MiqaatModel>> GetMiqaatsByMemberId(int memberId)
     {
         using var connection = _context.CreateConnection();
@@ -131,20 +188,19 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
     {
         using var connection = _context.CreateConnection();
 
+        // Allow re-enrollment: members can change status unless captain has ACTUALLY finalized that day
+        // (finalized = captain set final_status to 'Approved' or 'Rejected')
+        // Rows seeded by UpsertMembersForMiqaat have final_status = 'Pending', which is NOT truly finalized.
         var updateSql = """
             UPDATE `miqaat_members`
             SET `status` = @Status
             WHERE `member_id` = @MemberId AND `miqaat_id` = @MiqaatId
+                AND (`final_status` IS NULL OR `final_status` = '' OR `final_status` = 'Pending')
         """;
 
         if (days != null && days.Count > 0)
         {
             updateSql += " AND `miqaat_day` IN @Days";
-        }
-
-        if (status != "Pending")
-        {
-            updateSql += " AND `status` = 'Pending'";
         }
 
         var rowsAffected = await connection.ExecuteAsync(updateSql, new 
@@ -157,7 +213,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
 
         if (rowsAffected == 0)
         {
-            throw new Exception("Miqaat member record not found");
+            throw new Exception("No eligible days found to update. Captain may have already finalized.");
         }
     }
 
@@ -566,27 +622,37 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         }
     }
 
-    public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus)
+    public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days)
     {
         using var connection = _context.CreateConnection();
 
-        // Use parameterized query that works across database types
+        // Support day-wise captain approval
+        // For miqaats created after Feb 19, 2026: Captain can only approve/reject after member has enrolled (status = 'Approved')
+        // For existing/ongoing miqaats (from_date <= '2026-02-19'): Keep old behavior (no status restriction)
         var updateSql = @"
-            UPDATE miqaat_members
-            SET final_status = @FinalStatus
-            WHERE member_id = @MemberId AND miqaat_id = @MiqaatId
+            UPDATE miqaat_members mm
+            INNER JOIN local_miqaat lm ON lm.id = mm.miqaat_id
+            SET mm.final_status = @FinalStatus
+            WHERE mm.member_id = @MemberId AND mm.miqaat_id = @MiqaatId
+                AND (lm.from_date <= '2026-02-19' OR mm.status = 'Approved')
         ";
+
+        if (days != null && days.Count > 0)
+        {
+            updateSql += " AND mm.miqaat_day IN @Days";
+        }
 
         var rowsAffected = await connection.ExecuteAsync(updateSql, new 
         { 
             MemberId = memberId, 
             MiqaatId = miqaatId, 
-            FinalStatus = finalStatus 
+            FinalStatus = finalStatus,
+            Days = days
         });
 
         if (rowsAffected == 0)
         {
-            throw new Exception("Miqaat member record not found");
+            throw new Exception("No eligible days found. Member may not have enrolled yet, or record not found.");
         }
     }
 
@@ -681,6 +747,238 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
 
         var result = await connection.QueryAsync<MemberEnrollmentDayModel>(sql, new { MiqaatId = miqaatId, MemberId = memberId });
         return result.ToList();
+    }
+
+    public async Task<(
+        int TotalMiqaats, int ApprovedMiqaats, int PendingMiqaats, int RejectedMiqaats,
+        int TotalEnrolled, int TotalAttended,
+        int TotalLocal, int TotalInternational, int ReportsSubmitted
+    )> GetMiqaatOverallStatsAsync()
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                COUNT(*) AS TotalMiqaats,
+                SUM(CASE WHEN `admin_approval` = 'Approved' THEN 1 ELSE 0 END) AS ApprovedMiqaats,
+                SUM(CASE WHEN `admin_approval` = 'Pending' THEN 1 ELSE 0 END) AS PendingMiqaats,
+                SUM(CASE WHEN `admin_approval` = 'Rejected' THEN 1 ELSE 0 END) AS RejectedMiqaats,
+                SUM(CASE WHEN `miqaat_type` = 'Local' THEN 1 ELSE 0 END) AS TotalLocal,
+                SUM(CASE WHEN `miqaat_type` = 'International' THEN 1 ELSE 0 END) AS TotalInternational,
+                SUM(CASE WHEN `is_report_submitted` = 1 OR (`miqaat_image_1` IS NOT NULL AND `miqaat_image_1` != '') THEN 1 ELSE 0 END) AS ReportsSubmitted
+            FROM `local_miqaat`
+        """;
+
+        const string memberSql = """
+            SELECT
+                COUNT(DISTINCT CONCAT(mm.`member_id`, '-', mm.`miqaat_id`)) AS TotalEnrolled,
+                SUM(CASE WHEN mm.`is_attended` = 1 THEN 1 ELSE 0 END) AS TotalAttended
+            FROM `miqaat_members` mm
+            WHERE mm.`status` = 'Approved'
+        """;
+
+        var stats = await connection.QueryFirstOrDefaultAsync(sql);
+        var memberStats = await connection.QueryFirstOrDefaultAsync(memberSql);
+
+        int totalEnrolled = 0, totalAttended = 0;
+        if (memberStats != null)
+        {
+            totalEnrolled = Convert.ToInt32(memberStats.TotalEnrolled ?? 0);
+            totalAttended = Convert.ToInt32(memberStats.TotalAttended ?? 0);
+        }
+
+        if (stats == null)
+            return (0, 0, 0, 0, totalEnrolled, totalAttended, 0, 0, 0);
+
+        return (
+            Convert.ToInt32(stats.TotalMiqaats ?? 0),
+            Convert.ToInt32(stats.ApprovedMiqaats ?? 0),
+            Convert.ToInt32(stats.PendingMiqaats ?? 0),
+            Convert.ToInt32(stats.RejectedMiqaats ?? 0),
+            totalEnrolled,
+            totalAttended,
+            Convert.ToInt32(stats.TotalLocal ?? 0),
+            Convert.ToInt32(stats.TotalInternational ?? 0),
+            Convert.ToInt32(stats.ReportsSubmitted ?? 0)
+        );
+    }
+
+    public async Task<List<(long Id, string MiqaatName, string MiqaatType, string Jamaat, string Jamiyat,
+        DateTime FromDate, DateTime TillDate, int MiqaatDays, int VolunteerLimit,
+        string AdminApproval, string CaptainName, bool IsReportSubmitted,
+        int TotalEnrolled, int TotalApproved, int TotalAttended, int TotalPending, int TotalRejected)>> GetMiqaatDetailStatsAsync()
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                m.`id` AS Id,
+                m.`miqaat_name` AS MiqaatName,
+                m.`miqaat_type` AS MiqaatType,
+                IFNULL(m.`jamaat`, '') AS Jamaat,
+                IFNULL(m.`jamiyat`, '') AS Jamiyat,
+                m.`from_date` AS FromDate,
+                m.`till_date` AS TillDate,
+                IFNULL(m.`miqaat_days`, DATEDIFF(m.`till_date`, m.`from_date`) + 1) AS MiqaatDays,
+                IFNULL(m.`volunteer_limit`, 0) AS VolunteerLimit,
+                m.`admin_approval` AS AdminApproval,
+                IFNULL(m.`captain_name`, '') AS CaptainName,
+                CASE WHEN m.`is_report_submitted` = 1 OR (m.`miqaat_image_1` IS NOT NULL AND m.`miqaat_image_1` != '') THEN 1 ELSE 0 END AS IsReportSubmitted,
+                COUNT(DISTINCT CASE WHEN mm.`status` IN ('Approved','Pending','Rejected') THEN mm.`member_id` END) AS TotalEnrolled,
+                COUNT(DISTINCT CASE WHEN mm.`status` = 'Approved' THEN mm.`member_id` END) AS TotalApproved,
+                SUM(CASE WHEN mm.`is_attended` = 1 THEN 1 ELSE 0 END) AS TotalAttended,
+                COUNT(DISTINCT CASE WHEN mm.`status` = 'Pending' THEN mm.`member_id` END) AS TotalPending,
+                COUNT(DISTINCT CASE WHEN mm.`status` = 'Rejected' THEN mm.`member_id` END) AS TotalRejected
+            FROM `local_miqaat` m
+            LEFT JOIN `miqaat_members` mm ON mm.`miqaat_id` = m.`id` AND mm.`miqaat_day` = 1
+            GROUP BY m.`id`, m.`miqaat_name`, m.`miqaat_type`, m.`jamaat`, m.`jamiyat`,
+                     m.`from_date`, m.`till_date`, m.`miqaat_days`, m.`volunteer_limit`,
+                     m.`admin_approval`, m.`captain_name`, m.`is_report_submitted`, m.`miqaat_image_1`
+            ORDER BY m.`created_at` DESC
+        """;
+
+        var rows = await connection.QueryAsync(sql);
+        var list = new List<(long, string, string, string, string, DateTime, DateTime, int, int, string, string, bool, int, int, int, int, int)>();
+
+        foreach (var r in rows)
+        {
+            list.Add((
+                Convert.ToInt64(r.Id),
+                r.MiqaatName as string ?? "",
+                r.MiqaatType as string ?? "Local",
+                r.Jamaat as string ?? "",
+                r.Jamiyat as string ?? "",
+                r.FromDate is DateTime fd ? fd : Convert.ToDateTime(r.FromDate),
+                r.TillDate is DateTime td ? td : Convert.ToDateTime(r.TillDate),
+                Convert.ToInt32(r.MiqaatDays ?? 1),
+                Convert.ToInt32(r.VolunteerLimit ?? 0),
+                r.AdminApproval as string ?? "Pending",
+                r.CaptainName as string ?? "",
+                Convert.ToInt32(r.IsReportSubmitted ?? 0) == 1,
+                Convert.ToInt32(r.TotalEnrolled ?? 0),
+                Convert.ToInt32(r.TotalApproved ?? 0),
+                Convert.ToInt32(r.TotalAttended ?? 0),
+                Convert.ToInt32(r.TotalPending ?? 0),
+                Convert.ToInt32(r.TotalRejected ?? 0)
+            ));
+        }
+
+        return list;
+    }
+
+    public async Task<List<(string Jamaat, int TotalMiqaats, int ApprovedMiqaats, int TotalEnrolled, int TotalAttended)>> GetJamaatInsightsAsync()
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                IFNULL(m.`jamaat`, 'International') AS Jamaat,
+                COUNT(DISTINCT m.`id`) AS TotalMiqaats,
+                COUNT(DISTINCT CASE WHEN m.`admin_approval` = 'Approved' THEN m.`id` END) AS ApprovedMiqaats,
+                COUNT(DISTINCT CASE WHEN mm.`status` = 'Approved' THEN mm.`member_id` END) AS TotalEnrolled,
+                SUM(CASE WHEN mm.`is_attended` = 1 THEN 1 ELSE 0 END) AS TotalAttended
+            FROM `local_miqaat` m
+            LEFT JOIN `miqaat_members` mm ON mm.`miqaat_id` = m.`id` AND mm.`miqaat_day` = 1
+            WHERE m.`jamaat` IS NOT NULL AND m.`jamaat` != ''
+            GROUP BY m.`jamaat`
+            ORDER BY TotalMiqaats DESC
+        """;
+
+        var rows = await connection.QueryAsync(sql);
+        var jamaatList = new List<(string Jamaat, int TotalMiqaats, int ApprovedMiqaats, int TotalEnrolled, int TotalAttended)>();
+        foreach (var r in rows)
+        {
+            jamaatList.Add((
+                r.Jamaat as string ?? "",
+                Convert.ToInt32(r.TotalMiqaats ?? 0),
+                Convert.ToInt32(r.ApprovedMiqaats ?? 0),
+                Convert.ToInt32(r.TotalEnrolled ?? 0),
+                Convert.ToInt32(r.TotalAttended ?? 0)
+            ));
+        }
+        return jamaatList;
+    }
+
+    public async Task<List<(string MonthLabel, int Count)>> GetMonthlyTrendAsync()
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                DATE_FORMAT(`created_at`, '%b %Y') AS MonthLabel,
+                MIN(`created_at`) AS MonthSort,
+                COUNT(*) AS Count
+            FROM `local_miqaat`
+            GROUP BY DATE_FORMAT(`created_at`, '%b %Y')
+            ORDER BY MonthSort ASC
+            LIMIT 12
+        """;
+
+        var rows = await connection.QueryAsync(sql);
+        var trendList = new List<(string MonthLabel, int Count)>();
+        foreach (var r in rows)
+        {
+            trendList.Add((
+                r.MonthLabel as string ?? "",
+                Convert.ToInt32(r.Count ?? 0)
+            ));
+        }
+        return trendList;
+    }
+
+    public async Task<List<(
+        long MemberId, string FullName, string ItsId, string Rank, string Jamaat, string Contact,
+        int Day, string Status, string? FinalStatus, bool IsAttended
+    )>> GetAllMemberDayRowsForMiqaatAsync(long miqaatId)
+    {
+        using var connection = _context.CreateConnection();
+
+        const string sql = """
+            SELECT
+                m.`id`          AS MemberId,
+                m.`full_name`   AS FullName,
+                m.`its_id`      AS ItsId,
+                IFNULL(m.`rank`, '')    AS `Rank`,
+                IFNULL(m.`jamaat`, '') AS Jamaat,
+                IFNULL(m.`contact`, '') AS Contact,
+                mm.`miqaat_day` AS Day,
+                mm.`status`     AS Status,
+                mm.`final_status` AS FinalStatus,
+                IFNULL(mm.`is_attended`, 0) AS IsAttended
+            FROM `miqaat_members` mm
+            INNER JOIN `members` m ON m.`id` = mm.`member_id`
+            WHERE mm.`miqaat_id` = @MiqaatId
+                AND m.`is_active` = 1
+            ORDER BY m.`full_name` ASC, mm.`miqaat_day` ASC
+        """;
+
+        var rows = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
+        var result = new List<(long, string, string, string, string, string, int, string, string?, bool)>();
+
+        foreach (var r in rows)
+        {
+            var isAttendedRaw = r.IsAttended;
+            bool isAttended = false;
+            if (isAttendedRaw is bool b) isAttended = b;
+            else if (isAttendedRaw is int i) isAttended = i != 0;
+            else if (isAttendedRaw is byte by) isAttended = by != 0;
+            else if (isAttendedRaw != null) isAttended = Convert.ToBoolean(isAttendedRaw);
+
+            result.Add((
+                Convert.ToInt64(r.MemberId),
+                r.FullName as string ?? "",
+                r.ItsId as string ?? "",
+                r.Rank as string ?? "",
+                r.Jamaat as string ?? "",
+                r.Contact as string ?? "",
+                Convert.ToInt32(r.Day),
+                r.Status as string ?? "Pending",
+                r.FinalStatus as string,
+                isAttended
+            ));
+        }
+
+        return result;
     }
 }
 
