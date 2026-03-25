@@ -17,20 +17,17 @@ public class AuthController : BaseController
 {
     private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
-    private readonly ITokenStore _tokenStore;
     private readonly IEmailService _emailService;
     private readonly IDapperMemberRepository _memberRepository;
 
     public AuthController(
         IUserService userService,
         ITokenService tokenService,
-        ITokenStore tokenStore,
         IEmailService emailService,
         IDapperMemberRepository memberRepository)
     {
         _userService = userService;
         _tokenService = tokenService;
-        _tokenStore = tokenStore;
         _emailService = emailService;
         _memberRepository = memberRepository;
     }
@@ -56,11 +53,9 @@ public class AuthController : BaseController
             return BadRequest(new { message = "Invalid ITS Number or password" });
         }
 
-        var token = _tokenService.GenerateToken(user.itsId ?? user.email ?? string.Empty, GetRoleFromRank(user.rank, user.roles));
         var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
         var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
         
-        // Store token->user mapping
         var currentUser = new CurrentUserViewModel
         {
             id = user.id,
@@ -73,7 +68,7 @@ public class AuthController : BaseController
             jamaat = user.jamaat,
             requiresPasswordChange = requiresPasswordChange
         };
-        _tokenStore.StoreToken(token, currentUser);
+        var token = _tokenService.GenerateToken(currentUser, GetRoleFromRank(user.rank, user.roles));
         
         var auth = new AuthResponse(
             user.id,
@@ -127,11 +122,9 @@ public class AuthController : BaseController
                 return BadRequest(new { message = "Access denied. Only Resource Admin can login to the Admin Panel." });
             }
 
-            var token = _tokenService.GenerateToken(user.email ?? user.itsId ?? string.Empty, GetRoleFromRank(user.rank, user.roles));
             var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
             var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
             
-            // Store token->user mapping
             var currentUser = new CurrentUserViewModel
             {
                 id = user.id,
@@ -144,7 +137,7 @@ public class AuthController : BaseController
                 jamaat = user.jamaat,
                 requiresPasswordChange = requiresPasswordChange
             };
-            _tokenStore.StoreToken(token, currentUser);
+            var token = _tokenService.GenerateToken(currentUser, GetRoleFromRank(user.rank, user.roles));
             
             var auth = new AuthResponse(
                 user.id,
@@ -204,11 +197,9 @@ public class AuthController : BaseController
                 return BadRequest(new { message = "Access denied. Only Resource Admin can login to the Admin Panel." });
             }
 
-            var token = _tokenService.GenerateToken(user.email ?? user.itsId ?? string.Empty, GetRoleFromRank(user.rank, user.roles));
             var requiresPasswordChange = string.IsNullOrWhiteSpace(user.newPasswordHash);
             var hasNewPasswordHash = !string.IsNullOrWhiteSpace(user.newPasswordHash);
             
-            // Store token->user mapping
             var currentUser = new CurrentUserViewModel
             {
                 id = user.id,
@@ -221,7 +212,7 @@ public class AuthController : BaseController
                 jamaat = user.jamaat,
                 requiresPasswordChange = requiresPasswordChange
             };
-            _tokenStore.StoreToken(token, currentUser);
+            var token = _tokenService.GenerateToken(currentUser, GetRoleFromRank(user.rank, user.roles));
             
             var auth = new AuthResponse(
                 user.id,

@@ -70,13 +70,17 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             miqaatDays = 1;
         }
 
+        var jamaatList = jamaat.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                               .Select(j => j.Trim())
+                               .ToList();
+
         const string memberQuery = """
             SELECT id 
             FROM `members` 
-            WHERE `jamaat` = @Jamaat AND `is_active` = 1
+            WHERE `jamaat` IN @JamaatList AND `is_active` = 1
         """;
 
-        var memberIds = await connection.QueryAsync<int>(memberQuery, new { Jamaat = jamaat });
+        var memberIds = await connection.QueryAsync<int>(memberQuery, new { JamaatList = jamaatList });
         if (!memberIds.Any())
         {
             return;

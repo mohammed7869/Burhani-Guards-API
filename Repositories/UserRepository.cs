@@ -23,6 +23,7 @@ public interface IUserRepository
     Task<List<string>> GetAdminEmailsAsync();
     Task<List<MemberModel>> GetMembersByJamiyatAsync(string jamiyat);
     Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat);
+    Task<List<MemberModel>> GetHierarchyMembersByJamaatAsync(string jamaat);
     Task<MemberModel?> GetCaptainByFullNameAsync(string captainName);
     Task ApproveMember(int id);
 }
@@ -641,6 +642,65 @@ public class UserRepository : IUserRepository
                     `updated_at` AS UpdatedAt
                 FROM `members`
                 WHERE `jamaat` = @Jamaat
+                    AND `is_active` = 1
+                    AND `email` IS NOT NULL
+                    AND `email` != ''
+                ORDER BY `full_name` ASC
+            ";
+
+            var members = await connection.QueryAsync(sql, new { Jamaat = jamaat });
+            return members.Select(row => new MemberModel
+            {
+                Id = (long)row.Id,
+                Profile = row.Profile as string,
+                ItsId = row.ItsId as string ?? string.Empty,
+                Rank = row.Rank as string ?? string.Empty,
+                Roles = row.Roles as int?,
+                Jamiyat = row.Jamiyat as string,
+                Jamaat = row.Jamaat as string,
+                JamiyatId = row.JamiyatId as int?,
+                JamaatId = row.JamaatId as int?,
+                FullName = row.FullName as string ?? string.Empty,
+                Gender = row.Gender as string,
+                Email = row.Email as string ?? string.Empty,
+                Age = row.Age as int?,
+                Contact = row.Contact as string,
+                DateOfBirth = row.DateOfBirth as DateTime?,
+                IsActive = row.IsActive as bool? ?? true,
+                IsApproved = row.IsApproved as bool? ?? true,
+                CreatedAt = row.CreatedAt as DateTime? ?? DateTime.UtcNow,
+                UpdatedAt = row.UpdatedAt as DateTime? ?? DateTime.UtcNow
+            }).ToList();
+        }
+    }
+
+    public async Task<List<MemberModel>> GetHierarchyMembersByJamaatAsync(string jamaat)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT 
+                    `id` AS Id,
+                    `profile` AS Profile,
+                    `its_id` AS ItsId,
+                    `rank` AS `Rank`,
+                    `roles` AS Roles,
+                    `jamiyat` AS Jamiyat,
+                    `jamaat` AS Jamaat,
+                    `jamiyat_id` AS JamiyatId,
+                    `jamaat_id` AS JamaatId,
+                    `full_name` AS FullName,
+                    `gender` AS Gender,
+                    `email` AS Email,
+                    `age` AS Age,
+                    `contact` AS Contact,
+                    `date_of_birth` AS DateOfBirth,
+                    `is_active` AS IsActive,
+                    `is_approved` AS IsApproved,
+                    `created_at` AS CreatedAt,
+                    `updated_at` AS UpdatedAt
+                FROM `members`
+                WHERE (`jamaat` = @Jamaat OR `roles` IN (6, 7, 8))
                     AND `is_active` = 1
                     AND `email` IS NOT NULL
                     AND `email` != ''

@@ -169,8 +169,8 @@ public class MiqaatService : IMiqaatService
         {
             MiqaatName = request.MiqaatName,
             MiqaatType = miqaatType,
-            Jamaat = miqaatType == "International" ? "" : request.Jamaat,
-            Jamiyat = miqaatType == "International" ? "" : request.Jamiyat,
+            Jamaat = request.Jamaat ?? "",
+            Jamiyat = request.Jamiyat ?? "",
             FromDate = request.FromDate,
             TillDate = request.TillDate,
             MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate),
@@ -190,8 +190,8 @@ public class MiqaatService : IMiqaatService
             throw new Exception("Failed to create miqaat");
         }
 
-        // For Local miqaats, seed miqaat_members for the jamaat (same as approval flow)
-        if (miqaatType == "Local" && !string.IsNullOrWhiteSpace(request.Jamaat))
+        // Seed miqaat_members for the jamaat(s)
+        if (!string.IsNullOrWhiteSpace(request.Jamaat))
         {
             await _miqaatMemberRepository.UpsertMembersForMiqaat(id, request.Jamaat, AdminApprovalStatus.Pending);
         }
@@ -226,45 +226,54 @@ public class MiqaatService : IMiqaatService
                     </body>
                     </html>";
 
-                if (miqaatType == "International")
-                {
-                    // For International miqaats, send email to ALL active members
-                    var allMembers = await _userRepository.List();
-                    var memberEmails = allMembers
-                        .Where(m => !string.IsNullOrWhiteSpace(m.email) && (m.isActive == true || m.isActive == null))
-                        .Select(m => m.email)
-                        .Distinct()
-                        .ToList();
+                    // For International, if Jamiyats are selected but no Jamaats restrict, we could send to all. But if Jamaat is selected, send to them.
+                    bool sendToAll = string.IsNullOrWhiteSpace(request.Jamaat);
 
-                    if (memberEmails.Any())
+                    if (miqaatType == "International" && sendToAll)
                     {
-                        await _emailService.SendBulkEmailAsync(memberEmails, subject, bodyBuilder);
-                    }
-                }
-                else
-                {
-                    // For Local miqaats, send email to members of that jamaat + admins
-                    var emailList = new List<string>();
-                    
-                    var adminEmails = await _userRepository.GetAdminEmailsAsync();
-                    emailList.AddRange(adminEmails);
-
-                    if (!string.IsNullOrWhiteSpace(request.Jamaat))
-                    {
-                        var members = await _userRepository.GetMembersByJamaatAsync(request.Jamaat);
-                        var memberEmails = members
-                            .Where(m => !string.IsNullOrWhiteSpace(m.Email))
-                            .Select(m => m.Email)
+                        var allMembers = await _userRepository.List();
+                        var memberEmails = allMembers
+                            .Where(m => !string.IsNullOrWhiteSpace(m.email) && (m.isActive == true || m.isActive == null))
+                            .Select(m => m.email)
+                            .Distinct()
                             .ToList();
-                        emailList.AddRange(memberEmails);
-                    }
 
-                    emailList = emailList.Distinct().ToList();
-                    if (emailList.Any())
-                    {
-                        await _emailService.SendBulkEmailAsync(emailList, subject, bodyBuilder);
+                        if (memberEmails.Any())
+                        {
+                            await _emailService.SendBulkEmailAsync(memberEmails, subject, bodyBuilder);
+                        }
                     }
-                }
+                    else
+                    {
+                        var emailList = new List<string>();
+                        
+                        var adminEmails = await _userRepository.GetAdminEmailsAsync();
+                        emailList.AddRange(adminEmails);
+
+                        if (!string.IsNullOrWhiteSpace(request.Jamaat))
+                        {
+                            // Support comma-separated jamaats
+                            var jamaatList = request.Jamaat.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                           .Select(j => j.Trim())
+                                                           .ToList();
+                                                           
+                            foreach (var j in jamaatList)
+                            {
+                                var members = await _userRepository.GetMembersByJamaatAsync(j);
+                                var memberEmails = members
+                                    .Where(m => !string.IsNullOrWhiteSpace(m.Email))
+                                    .Select(m => m.Email)
+                                    .ToList();
+                                emailList.AddRange(memberEmails);
+                            }
+                        }
+
+                        emailList = emailList.Distinct().ToList();
+                        if (emailList.Any())
+                        {
+                            await _emailService.SendBulkEmailAsync(emailList, subject, bodyBuilder);
+                        }
+                    }
             }
             catch (Exception ex)
             {
@@ -419,22 +428,35 @@ public class MiqaatService : IMiqaatService
 
                     await _emailService.SendBulkEmailAsync(emailList, subject, body);
 
-                    // If approved, also send email to all members from the same jamaat
                     if (parsedStatus == AdminApprovalStatus.Approved && !string.IsNullOrWhiteSpace(existingMiqaat.Jamaat))
                     {
-                        var members = await _userRepository.GetMembersByJamaatAsync(existingMiqaat.Jamaat);
-                        var memberEmails = members
-                            .Where(m => !string.IsNullOrWhiteSpace(m.Email))
-                            .Select(m => m.Email)
-                            .ToList();
-
-                        // Add captain email to member list if not already included
-                        if (captain != null && !string.IsNullOrWhiteSpace(captain.Email) && !memberEmails.Contains(captain.Email))
+                        var allMemberEmails = new HashSet<string>();
+                        // Split comma separated jamaats
+                        var jamaatList = existingMiqaat.Jamaat.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                              .Select(j => j.Trim())
+                                                              .ToList();
+                        foreach (var j in jamaatList)
                         {
-                            memberEmails.Add(captain.Email);
+                            var members = await _userRepository.GetMembersByJamaatAsync(j);
+                            var memberEmails = members
+                                .Where(m => !string.IsNullOrWhiteSpace(m.Email))
+                                .Select(m => m.Email)
+                                .ToList();
+                                
+                            foreach (var email in memberEmails) 
+                            { 
+                                if (!allMemberEmails.Contains(email))
+                                    allMemberEmails.Add(email);
+                            }
                         }
 
-                        if (memberEmails.Any())
+                        var finalEmails = allMemberEmails.ToList();
+                        if (captain != null && !string.IsNullOrWhiteSpace(captain.Email) && !finalEmails.Contains(captain.Email))
+                        {
+                            finalEmails.Add(captain.Email);
+                        }
+
+                        if (finalEmails.Any())
                         {
                             var memberSubject = $"New Miqaat Approved: {existingMiqaat.MiqaatName}";
                             var memberBody = $@"
@@ -458,7 +480,7 @@ public class MiqaatService : IMiqaatService
                                 </body>
                                 </html>";
 
-                            await _emailService.SendBulkEmailAsync(memberEmails, memberSubject, memberBody);
+                            await _emailService.SendBulkEmailAsync(finalEmails, memberSubject, memberBody);
                         }
                     }
                 }

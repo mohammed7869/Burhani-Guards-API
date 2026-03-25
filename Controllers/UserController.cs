@@ -119,6 +119,20 @@ public class UserController : BaseController
         }
     }
 
+    [HttpGet("hierarchy/{jamaat}")]
+    public async Task<IActionResult> GetHierarchyMembersByJamaat(string jamaat)
+    {
+        try
+        {
+            var members = await _userService.GetHierarchyMembersByJamaatAsync(jamaat);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{id}/upload-profile")]
     public async Task<IActionResult> UploadProfileImage(int id, IFormFile file)
     {

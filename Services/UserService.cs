@@ -24,6 +24,7 @@ public interface IUserService
     Task<JamiyatJamaatResponse> GetJamiyatJamaatWithCounts();
     Task ApproveMember(int id);
     Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat);
+    Task<List<MemberModel>> GetHierarchyMembersByJamaatAsync(string jamaat);
 }
 
 public class UserService : IUserService
@@ -365,6 +366,11 @@ public class UserService : IUserService
     public async Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat)
     {
         return await _userRepository.GetMembersByJamaatAsync(jamaat);
+    }
+
+    public async Task<List<MemberModel>> GetHierarchyMembersByJamaatAsync(string jamaat)
+    {
+        return await _userRepository.GetHierarchyMembersByJamaatAsync(jamaat);
     }
 
     private UserViewModel MapToViewModel(UserModel user)

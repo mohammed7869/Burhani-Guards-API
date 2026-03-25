@@ -98,7 +98,6 @@ builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.IMemberSnap
 
 // Register services
 builder.Services.AddSingleton<ITokenService, TokenService>();
-builder.Services.AddSingleton<ITokenStore, TokenStore>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IMiqaatService, MiqaatService>();
