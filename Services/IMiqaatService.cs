@@ -32,5 +32,6 @@ public interface IMiqaatService
     Task<List<MemberEnrollmentDayResponse>> GetMemberEnrollmentDays(long miqaatId, int memberId);
     Task<MiqaatInsightsResponse> GetInsights();
     Task<MiqaatDetailedInsightsResponse> GetMiqaatDetailedInsights(long miqaatId);
+    Task<List<MemberTrackingRowResponse>> GetMemberDayTrackingAsync(long miqaatId);
 }
 

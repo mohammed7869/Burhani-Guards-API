@@ -323,10 +323,10 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can view enrolled members
-        if (CurrentUser.roles != 2)
+        // Only Captains and Admins can view enrolled members
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 7)
         {
-            return Forbid("Only Captains can view enrolled members");
+            return Forbid("Only Captains or Admins can view enrolled members");
         }
 
         try
@@ -348,10 +348,10 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can view all members
-        if (CurrentUser.roles != 2)
+        // Only Captains and Admins can view all members
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 7)
         {
-            return Forbid("Only Captains can view all members");
+            return Forbid("Only Captains or Admins can view all members");
         }
 
         try
@@ -658,6 +658,31 @@ public class MiqaatController : BaseController
         }
         
         return fileName;
+    }
+
+    [HttpGet("{miqaatId:long}/day-tracking")]
+    public async Task<IActionResult> GetMemberDayTracking(long miqaatId)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Admin (7) and Captain (2) can view day tracking
+        if (CurrentUser.roles != 7 && CurrentUser.roles != 2)
+        {
+            return Forbid("Only Admin or Captain can view member day tracking");
+        }
+
+        try
+        {
+            var tracking = await _miqaatService.GetMemberDayTrackingAsync(miqaatId);
+            return Ok(tracking);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }
 

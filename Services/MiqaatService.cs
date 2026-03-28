@@ -1338,6 +1338,24 @@ public class MiqaatService : IMiqaatService
 
         return new MiqaatDetailedInsightsResponse(summary, dayStats, memberGroups);
     }
+
+    public async Task<List<MemberTrackingRowResponse>> GetMemberDayTrackingAsync(long miqaatId)
+    {
+        var rows = await _miqaatMemberRepository.GetAllMemberDayRowsForMiqaatAsync(miqaatId);
+        return rows.Select(r => new MemberTrackingRowResponse(
+            r.MemberId,
+            r.FullName,
+            r.ItsId,
+            r.Rank,
+            r.Jamaat,
+            r.Contact,
+            r.Day,
+            r.Status,
+            r.FinalStatus,
+            r.AdminStatus,
+            r.IsAttended
+        )).ToList();
+    }
 }
 
 
