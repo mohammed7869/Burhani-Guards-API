@@ -11,6 +11,7 @@ public sealed record EnrolledMemberResponse(
     string? FinalStatus,
     string? ItsId,
     bool? IsAttended,
-    string? StatusCategory  // "Enrolled", "Pending", or "Rejected"
+    string? StatusCategory,  // "Enrolled", "Pending", or "Rejected"
+    string? AdminStatus = null  // For International miqaats: null, "Pending", "Approved", "Rejected"
 );
 

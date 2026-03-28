@@ -21,6 +21,7 @@ public class MiqaatModel : BaseModel
     // Member-specific statuses when joined from miqaat_members
     public string? MemberStatus { get; set; }
     public string? FinalStatus { get; set; }
+    public string? AdminStatus { get; set; }
     // Day-wise attendance fields (when joined from miqaat_members)
     public int? MiqaatDay { get; set; }
     public bool? IsAttended { get; set; }

@@ -27,5 +27,12 @@ public class MemberModel : BaseModel
     public bool IsApproved { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Not a column in the members table — populated only when JOINed with miqaat_members
+    [NotMapped]
+    public string? AdminStatus { get; set; }
+
+    [NotMapped]
+    public bool IsAttended { get; set; }
 }
 

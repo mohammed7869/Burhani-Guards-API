@@ -17,6 +17,7 @@ public sealed record MiqaatResponse(
     DateTime UpdatedAt,
     string? Status,
     string? FinalStatus,
+    string? AdminStatus,
     string? MiqaatImage1,
     string? MiqaatImage2,
     string? Notes,

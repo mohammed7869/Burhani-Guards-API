@@ -4,5 +4,6 @@ public record MemberEnrollmentDayResponse(
     int Day,
     string Status,
     string? FinalStatus,
+    string? AdminStatus,
     string MiqaatDate
 );

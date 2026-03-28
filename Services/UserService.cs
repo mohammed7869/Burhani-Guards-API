@@ -32,13 +32,15 @@ public class UserService : IUserService
     private readonly IUserRepository _userRepository;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IEmailService _emailService;
+    private readonly IActivityLogService _activityLogService;
     private CurrentUserViewModel? GetCurrentUser() => _httpContextAccessor.HttpContext?.Items["User"] as CurrentUserViewModel;
 
-    public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, IEmailService emailService)
+    public UserService(IUserRepository userRepository, IHttpContextAccessor httpContextAccessor, IEmailService emailService, IActivityLogService activityLogService)
     {
         _userRepository = userRepository;
         _httpContextAccessor = httpContextAccessor;
         _emailService = emailService;
+        _activityLogService = activityLogService;
     }
 
     public async Task<int> Add(UserCreateViewModel viewmodel)
@@ -91,7 +93,13 @@ public class UserService : IUserService
             CreatedBy = currentUser?.fullName
         };
 
-        return await _userRepository.Add(user);
+        var memberId = await _userRepository.Add(user);
+
+        // Log member creation
+        var creatorRole = currentUser?.roles == MemberRank.ResourceAdmin ? "Admin" : "Captain";
+        _ = _activityLogService.LogMemberCreatedAsync(memberId, viewmodel.fullName, viewmodel.itsId, currentUser?.fullName, currentUser?.id, creatorRole);
+
+        return memberId;
     }
 
     public async Task Delete(int id)
@@ -102,6 +110,14 @@ public class UserService : IUserService
 
     public async Task Edit(UserEditViewModel viewmodel)
     {
+        // Fetch existing member BEFORE editing to track changes
+        UserModel? existingMember = null;
+        try
+        {
+            existingMember = await _userRepository.SelectUser(viewmodel.id);
+        }
+        catch { } // If member not found, proceed anyway - the repository will throw
+
         var user = new UserModel
         {
             Id = viewmodel.id,
@@ -119,6 +135,46 @@ public class UserService : IUserService
         };
 
         await _userRepository.Edit(user);
+
+        // Log member update with old/new values
+        var currentUser = GetCurrentUser();
+        var performerRole = currentUser?.roles == MemberRank.ResourceAdmin ? "Admin" : "Captain";
+
+        // Build change details comparing old vs new
+        string? oldValue = null;
+        string? newValue = null;
+        var changes = new List<string>();
+
+        if (existingMember != null)
+        {
+            if (existingMember.FullName != viewmodel.fullName && !string.IsNullOrWhiteSpace(viewmodel.fullName))
+                changes.Add($"Name: {existingMember.FullName} → {viewmodel.fullName}");
+            if (existingMember.Email != viewmodel.email && !string.IsNullOrWhiteSpace(viewmodel.email))
+                changes.Add($"Email: {existingMember.Email} → {viewmodel.email}");
+            if (existingMember.ItsId != viewmodel.itsId && !string.IsNullOrWhiteSpace(viewmodel.itsId))
+                changes.Add($"ITS ID: {existingMember.ItsId} → {viewmodel.itsId}");
+            if (existingMember.Contact != viewmodel.contact && !string.IsNullOrWhiteSpace(viewmodel.contact))
+                changes.Add($"Contact: {existingMember.Contact} → {viewmodel.contact}");
+            if (existingMember.Rank != viewmodel.rank && !string.IsNullOrWhiteSpace(viewmodel.rank))
+                changes.Add($"Rank: {existingMember.Rank} → {viewmodel.rank}");
+            if (existingMember.Jamaat != viewmodel.jamaat && !string.IsNullOrWhiteSpace(viewmodel.jamaat))
+                changes.Add($"Jamaat: {existingMember.Jamaat} → {viewmodel.jamaat}");
+            if (existingMember.Jamiyat != viewmodel.jamiyat && !string.IsNullOrWhiteSpace(viewmodel.jamiyat))
+                changes.Add($"Jamiyat: {existingMember.Jamiyat} → {viewmodel.jamiyat}");
+            if (existingMember.Gender != viewmodel.gender && !string.IsNullOrWhiteSpace(viewmodel.gender))
+                changes.Add($"Gender: {existingMember.Gender} → {viewmodel.gender}");
+            if (existingMember.Age != viewmodel.age && viewmodel.age.HasValue)
+                changes.Add($"Age: {existingMember.Age} → {viewmodel.age}");
+
+            oldValue = existingMember.FullName;
+            newValue = viewmodel.fullName;
+        }
+
+        var details = changes.Count > 0
+            ? System.Text.Json.JsonSerializer.Serialize(new { changes })
+            : null;
+
+        _ = _activityLogService.LogMemberUpdatedAsync(viewmodel.id, viewmodel.fullName, currentUser?.fullName ?? "Unknown", currentUser?.id, performerRole, details, oldValue, newValue);
     }
 
     public Task<List<UserListViewModel>> GetAll()
@@ -361,6 +417,17 @@ public class UserService : IUserService
         }
 
         await _userRepository.ApproveMember(id);
+
+        // Log member approval
+        try
+        {
+            var member = await _userRepository.SelectUser(id);
+            if (member != null)
+            {
+                _ = _activityLogService.LogMemberApprovedAsync(id, member.FullName, currentUser.fullName, currentUser.id, "Admin");
+            }
+        }
+        catch { } // Don't break approval if logging fails
     }
 
     public async Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat)

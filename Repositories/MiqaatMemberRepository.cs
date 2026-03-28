@@ -19,6 +19,8 @@ public interface IMiqaatMemberRepository
     Task<Dictionary<long, string?>> GetFinalStatusesByMiqaatId(long miqaatId);
     Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days);
+    Task UpdateAdminStatus(int memberId, long miqaatId, string adminStatus, IReadOnlyCollection<int>? days);
+    Task<List<MemberModel>> GetCaptainApprovedMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId);
     Task<List<MemberEnrollmentDayModel>> GetMemberEnrollmentDays(long miqaatId, int memberId);
@@ -40,7 +42,7 @@ public interface IMiqaatMemberRepository
     /// </summary>
     Task<List<(
         long MemberId, string FullName, string ItsId, string Rank, string Jamaat, string Contact,
-        int Day, string Status, string? FinalStatus, bool IsAttended
+        int Day, string Status, string? FinalStatus, string? AdminStatus, bool IsAttended
     )>> GetAllMemberDayRowsForMiqaatAsync(long miqaatId);
 }
 
@@ -161,7 +163,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`created_at` AS CreatedAt,
                 m.`updated_at` AS UpdatedAt,
                 mm.`MemberStatus` AS MemberStatus,
-                mm.`FinalStatus` AS FinalStatus
+                mm.`FinalStatus` AS FinalStatus,
+                mm.`AdminStatus` AS AdminStatus
             FROM `local_miqaat` m
             INNER JOIN (
                 SELECT 
@@ -175,7 +178,12 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                         WHEN SUM(CASE WHEN `final_status` = 'Approved' THEN 1 ELSE 0 END) > 0 THEN 'Approved'
                         WHEN SUM(CASE WHEN `final_status` = 'Rejected' THEN 1 ELSE 0 END) > 0 THEN 'Rejected'
                         ELSE NULL
-                    END AS `FinalStatus`
+                    END AS `FinalStatus`,
+                    CASE 
+                        WHEN SUM(CASE WHEN `admin_status` = 'Approved' THEN 1 ELSE 0 END) > 0 THEN 'Approved'
+                        WHEN SUM(CASE WHEN `admin_status` = 'Rejected' THEN 1 ELSE 0 END) > 0 THEN 'Rejected'
+                        ELSE NULL
+                    END AS `AdminStatus`
                 FROM `miqaat_members`
                 WHERE `member_id` = @MemberId
                 GROUP BY `miqaat_id`
@@ -234,6 +242,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     WHEN lm.`admin_approval` = 'Approved'
                      AND mm.`status` = 'Approved'
                      AND mm.`final_status` = 'Approved'
+                     AND (lm.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
                     THEN IFNULL(mm.`points`, 0)
                     ELSE 0
                 END), 0) AS TotalPoints
@@ -263,6 +272,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     WHEN lm.`admin_approval` = 'Approved'
                      AND mm.`status` = 'Approved'
                      AND mm.`final_status` = 'Approved'
+                     AND (lm.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
                     THEN IFNULL(mm.`points`, 0)
                     ELSE 0
                 END), 0) AS TotalPoints
@@ -298,6 +308,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     WHEN lm.`admin_approval` = 'Approved'
                      AND mm.`status` = 'Approved'
                      AND mm.`final_status` = 'Approved'
+                     AND (lm.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
                     THEN IFNULL(mm.`points`, 0)
                     ELSE 0
                 END), 0) AS TotalPoints
@@ -479,6 +490,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         const string sql = """
             SELECT 
                 m.`id` AS Id,
+                lm.`miqaat_type` AS MiqaatType,
                 m.`profile` AS Profile,
                 m.`its_id` AS ItsId,
                 m.`rank` AS `Rank`,
@@ -497,10 +509,15 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`updated_at` AS UpdatedAt
             FROM `members` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
             WHERE mm.`miqaat_id` = @MiqaatId 
                 AND mm.`miqaat_day` = @Day
                 AND mm.`status` = 'Approved'
                 AND mm.`final_status` = 'Approved'
+                AND (
+                    lm.`miqaat_type` != 'International' 
+                    OR mm.`admin_status` = 'Approved'
+                )
                 AND m.`is_active` = 1
             ORDER BY m.`full_name` ASC
         """;
@@ -660,6 +677,143 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         }
     }
 
+    public async Task UpdateAdminStatus(int memberId, long miqaatId, string adminStatus, IReadOnlyCollection<int>? days)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Admin can only approve/reject members whose final_status is already 'Approved' (captain approved)
+        var updateSql = @"
+            UPDATE miqaat_members mm
+            INNER JOIN local_miqaat lm ON lm.id = mm.miqaat_id
+            SET mm.admin_status = @AdminStatus
+            WHERE mm.member_id = @MemberId AND mm.miqaat_id = @MiqaatId
+                AND lm.miqaat_type = 'International'
+                AND mm.final_status = 'Approved'
+        ";
+
+        if (days != null && days.Count > 0)
+        {
+            updateSql += " AND mm.miqaat_day IN @Days";
+        }
+
+        var rowsAffected = await connection.ExecuteAsync(updateSql, new 
+        { 
+            MemberId = memberId, 
+            MiqaatId = miqaatId, 
+            AdminStatus = adminStatus,
+            Days = days
+        });
+
+        if (rowsAffected == 0)
+        {
+            throw new Exception("No eligible days found. Member may not have been captain-approved, or miqaat is not International.");
+        }
+    }
+
+    public async Task<List<MemberModel>> GetCaptainApprovedMembersForIntlMiqaat(long miqaatId, int? day = null)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Build the query dynamically based on whether a day filter is provided
+        var sql = $@"
+            SELECT 
+                m.`id` AS Id,
+                m.`profile` AS Profile,
+                m.`its_id` AS ItsId,
+                m.`rank` AS `Rank`,
+                m.`roles` AS Roles,
+                m.`jamiyat` AS Jamiyat,
+                m.`jamaat` AS Jamaat,
+                m.`full_name` AS FullName,
+                m.`gender` AS Gender,
+                m.`email` AS Email,
+                m.`age` AS Age,
+                m.`contact` AS Contact,
+                m.`is_active` AS IsActive,
+                mm.`admin_status` AS AdminStatus,
+                mm.`miqaat_day` AS MiqaatDay,
+                mm.`is_attended` AS IsAttended
+            FROM `members` m
+            INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
+            WHERE mm.`miqaat_id` = @MiqaatId
+                AND lm.`miqaat_type` = 'International'
+                AND mm.`status` = 'Approved'
+                AND mm.`final_status` = 'Approved'
+                AND m.`is_active` = 1
+                {(day.HasValue ? "AND mm.`miqaat_day` = @Day" : "")}
+            ORDER BY m.`full_name` ASC
+        ";
+
+        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId, Day = day ?? 0 });
+        var members = new List<MemberModel>();
+
+        if (day.HasValue)
+        {
+            // Day-specific: return one entry per member for that day
+            foreach (var row in result)
+            {
+                var isAttended = false;
+                if (row.IsAttended != null)
+                {
+                    if (row.IsAttended is bool boolVal) isAttended = boolVal;
+                    else if (row.IsAttended is int intVal) isAttended = intVal != 0;
+                    else if (row.IsAttended is byte byteVal) isAttended = byteVal != 0;
+                    else isAttended = Convert.ToBoolean(row.IsAttended);
+                }
+
+                members.Add(new MemberModel
+                {
+                    Id = (long)row.Id,
+                    Profile = row.Profile as string,
+                    ItsId = row.ItsId as string ?? string.Empty,
+                    Rank = row.Rank as string ?? string.Empty,
+                    Roles = row.Roles as int?,
+                    Jamiyat = row.Jamiyat as string,
+                    Jamaat = row.Jamaat as string,
+                    FullName = row.FullName as string ?? string.Empty,
+                    Gender = row.Gender as string,
+                    Email = row.Email as string ?? string.Empty,
+                    Age = row.Age as int?,
+                    Contact = row.Contact as string,
+                    IsActive = row.IsActive as bool? ?? true,
+                    AdminStatus = row.AdminStatus as string,
+                    IsAttended = isAttended
+                });
+            }
+        }
+        else
+        {
+            // No day filter: return distinct members (backward compatible)
+            var seen = new HashSet<long>();
+            foreach (var row in result)
+            {
+                var id = (long)row.Id;
+                if (!seen.Add(id)) continue;
+
+                members.Add(new MemberModel
+                {
+                    Id = id,
+                    Profile = row.Profile as string,
+                    ItsId = row.ItsId as string ?? string.Empty,
+                    Rank = row.Rank as string ?? string.Empty,
+                    Roles = row.Roles as int?,
+                    Jamiyat = row.Jamiyat as string,
+                    Jamaat = row.Jamaat as string,
+                    FullName = row.FullName as string ?? string.Empty,
+                    Gender = row.Gender as string,
+                    Email = row.Email as string ?? string.Empty,
+                    Age = row.Age as int?,
+                    Contact = row.Contact as string,
+                    IsActive = row.IsActive as bool? ?? true,
+                    AdminStatus = row.AdminStatus as string
+                });
+            }
+        }
+        
+        return members;
+    }
+
     public async Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId)
     {
         using var connection = _context.CreateConnection();
@@ -705,13 +859,15 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 mm.`is_attended` AS IsAttended,
                 IFNULL(mm.`points`, 0) AS Points,
                 mm.`status` AS MemberStatus,
-                mm.`final_status` AS FinalStatus
+                mm.`final_status` AS FinalStatus,
+                mm.`admin_status` AS AdminStatus
             FROM `miqaat_members` mm
             INNER JOIN `local_miqaat` m ON m.`id` = mm.`miqaat_id`
             WHERE mm.`member_id` = @MemberId
                 AND m.`admin_approval` = 'Approved'
                 AND mm.`status` = 'Approved'
                 AND mm.`final_status` = 'Approved'
+                AND (m.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
             ORDER BY m.`from_date` DESC, mm.`miqaat_day` ASC
         """;
 
@@ -725,6 +881,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 AND m.`admin_approval` = 'Approved'
                 AND mm.`status` = 'Approved'
                 AND mm.`final_status` = 'Approved'
+                AND (m.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
         """;
 
         var totalPoints = await connection.QueryFirstOrDefaultAsync<int>(totalSql, new { MemberId = memberId });
@@ -741,6 +898,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 mm.`miqaat_day` AS MiqaatDay,
                 mm.`status` AS Status,
                 mm.`final_status` AS FinalStatus,
+                mm.`admin_status` AS AdminStatus,
                 DATE_ADD(m.`from_date`, INTERVAL (mm.`miqaat_day` - 1) DAY) AS MiqaatDate
             FROM `miqaat_members` mm
             INNER JOIN `local_miqaat` m ON m.`id` = mm.`miqaat_id`
@@ -932,7 +1090,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
 
     public async Task<List<(
         long MemberId, string FullName, string ItsId, string Rank, string Jamaat, string Contact,
-        int Day, string Status, string? FinalStatus, bool IsAttended
+        int Day, string Status, string? FinalStatus, string? AdminStatus, bool IsAttended
     )>> GetAllMemberDayRowsForMiqaatAsync(long miqaatId)
     {
         using var connection = _context.CreateConnection();
@@ -948,6 +1106,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 mm.`miqaat_day` AS Day,
                 mm.`status`     AS Status,
                 mm.`final_status` AS FinalStatus,
+                mm.`admin_status` AS AdminStatus,
                 IFNULL(mm.`is_attended`, 0) AS IsAttended
             FROM `miqaat_members` mm
             INNER JOIN `members` m ON m.`id` = mm.`member_id`
@@ -957,7 +1116,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         """;
 
         var rows = await connection.QueryAsync(sql, new { MiqaatId = miqaatId });
-        var result = new List<(long, string, string, string, string, string, int, string, string?, bool)>();
+        var result = new List<(long, string, string, string, string, string, int, string, string?, string?, bool)>();
 
         foreach (var r in rows)
         {
@@ -978,6 +1137,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 Convert.ToInt32(r.Day),
                 r.Status as string ?? "Pending",
                 r.FinalStatus as string,
+                r.AdminStatus as string,
                 isAttended
             ));
         }

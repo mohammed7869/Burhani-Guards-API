@@ -225,6 +225,34 @@ public sealed class MySqlBootstrapper
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             """);
 
+        // Create activity_logs table for audit trail
+        await dbConnection.ExecuteAsync("""
+            CREATE TABLE IF NOT EXISTS `activity_logs` (
+                `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                `entity_type` VARCHAR(50) NOT NULL,
+                `entity_id` BIGINT NOT NULL,
+                `action` VARCHAR(100) NOT NULL,
+                `performed_by` VARCHAR(255) NULL,
+                `performed_by_id` INT NULL,
+                `performed_by_role` VARCHAR(50) NULL,
+                `target_member_id` INT NULL,
+                `target_member_name` VARCHAR(255) NULL,
+                `miqaat_id` BIGINT NULL,
+                `miqaat_day` INT NULL,
+                `old_value` VARCHAR(255) NULL,
+                `new_value` VARCHAR(255) NULL,
+                `details` TEXT NULL,
+                `ip_address` VARCHAR(45) NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX `IX_activity_logs_entity` (`entity_type`, `entity_id`),
+                INDEX `IX_activity_logs_miqaat` (`miqaat_id`),
+                INDEX `IX_activity_logs_action` (`action`),
+                INDEX `IX_activity_logs_performer` (`performed_by_id`),
+                INDEX `IX_activity_logs_target` (`target_member_id`),
+                INDEX `IX_activity_logs_created_at` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """);
+
         // Create miqaat_members table
         await dbConnection.ExecuteAsync("""
             CREATE TABLE IF NOT EXISTS `miqaat_members` (
@@ -280,6 +308,16 @@ public sealed class MySqlBootstrapper
             await dbConnection.ExecuteAsync("""
                 ALTER TABLE `miqaat_members`
                 ADD COLUMN `points` INT NOT NULL DEFAULT 0;
+                """);
+        }
+        catch { } // Column might already exist
+
+        // Migration: Add admin_status column for International Miqaat admin approval workflow
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                ALTER TABLE `miqaat_members`
+                ADD COLUMN `admin_status` VARCHAR(50) NULL AFTER `final_status`;
                 """);
         }
         catch { } // Column might already exist

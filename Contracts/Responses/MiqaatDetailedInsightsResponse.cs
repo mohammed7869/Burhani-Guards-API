@@ -70,5 +70,6 @@ public record MiqaatMemberDayEntry(
     string DayDate,
     string Status,        // Pending | Approved | Rejected
     string? FinalStatus,  // null | Pending | Approved | Rejected
+    string? AdminStatus,  // null | Pending | Approved | Rejected (International miqaats only)
     bool IsAttended
 );
