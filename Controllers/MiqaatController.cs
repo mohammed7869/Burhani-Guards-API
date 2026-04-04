@@ -180,6 +180,25 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpPost("{id:long}/resend-email")]
+    public async Task<IActionResult> ResendEmail(long id)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            await _miqaatService.ResendMiqaatEmail(id);
+            return Ok(new { message = "Email resent successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("member/{memberId}")]
     public async Task<IActionResult> GetMiqaatsByMemberId(int memberId)
     {
@@ -214,10 +233,11 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can view member attendance/points history, unless it's the member themselves
-        if (CurrentUser.roles != 2 && CurrentUser.id != memberId)
+        // Captains (2), Admins (4,5,6,7) can view any member's history; members can view their own
+        var isAllowedRole = CurrentUser.roles is 2 or 4 or 5 or 6 or 7;
+        if (!isAllowedRole && CurrentUser.id != memberId)
         {
-            return Forbid("Only Captains can view member attendance history");
+            return StatusCode(403, new { message = "You do not have permission to view member attendance history" });
         }
 
         try
@@ -356,7 +376,9 @@ public class MiqaatController : BaseController
 
         try
         {
-            var members = await _miqaatService.GetAllMembersByMiqaatId(miqaatId);
+            // Captains only see members from their own jamaat; Admins see all
+            string? captainJamaat = CurrentUser.roles == 2 ? CurrentUser.jamaat : null;
+            var members = await _miqaatService.GetAllMembersByMiqaatId(miqaatId, captainJamaat);
             return Ok(members);
         }
         catch (Exception ex)
@@ -400,7 +422,33 @@ public class MiqaatController : BaseController
         try
         {
             var members = await _miqaatService.GetApprovedMembersForAttendance(miqaatId, day);
-            return Ok(members);
+            var windowInfo = _miqaatService.GetAttendanceWindowInfo(miqaatId, miqaat.FromDate, miqaat.TillDate, miqaat.MiqaatDays, day);
+            return Ok(new { members, attendanceWindow = windowInfo });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{miqaatId:long}/attendance-window-info")]
+    public async Task<IActionResult> GetAttendanceWindowInfo(long miqaatId, [FromQuery] int day = 1)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var miqaat = await _miqaatService.GetById(miqaatId);
+            if (miqaat == null)
+            {
+                return NotFound(new { message = "Miqaat not found" });
+            }
+
+            var windowInfo = _miqaatService.GetAttendanceWindowInfo(miqaatId, miqaat.FromDate, miqaat.TillDate, miqaat.MiqaatDays, day);
+            return Ok(windowInfo);
         }
         catch (Exception ex)
         {

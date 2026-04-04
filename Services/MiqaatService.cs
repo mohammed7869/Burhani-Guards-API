@@ -205,13 +205,22 @@ public class MiqaatService : IMiqaatService
             await _miqaatMemberRepository.UpsertMembersForMiqaat(id, request.Jamaat, AdminApprovalStatus.Pending);
         }
 
-        // Auto-enroll the captain of the jamaat for all days
+        // Auto-enroll the captain(s) of the selected jamaat(s) for all days
         if (!string.IsNullOrWhiteSpace(request.Jamaat))
         {
-            var captain = await _userRepository.GetCaptainByJamaatAsync(request.Jamaat);
-            if (captain != null)
+            var jamaatList = request.Jamaat
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(j => j.Trim())
+                .Where(j => !string.IsNullOrEmpty(j))
+                .ToList();
+
+            foreach (var jamaat in jamaatList)
             {
-                await _miqaatMemberRepository.UpsertCaptainForMiqaat((int)captain.Id, id, AdminApprovalStatus.Approved);
+                var captain = await _userRepository.GetCaptainByJamaatAsync(jamaat);
+                if (captain != null)
+                {
+                    await _miqaatMemberRepository.UpsertCaptainForMiqaat((int)captain.Id, id, AdminApprovalStatus.Approved);
+                }
             }
         }
 
@@ -537,6 +546,96 @@ public class MiqaatService : IMiqaatService
         await _miqaatRepository.Delete(id);
     }
 
+    public async Task ResendMiqaatEmail(long miqaatId)
+    {
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            throw new Exception("Miqaat not found");
+        }
+
+        var miqaatType = miqaat.MiqaatType ?? "Local";
+        var typeLabel = miqaatType == "International" ? "International" : "Local";
+        var statusText = miqaat.AdminApproval == AdminApprovalStatus.Approved ? "Approved" :
+                         miqaat.AdminApproval == AdminApprovalStatus.Rejected ? "Rejected" : "Pending";
+
+        var subject = $"New {typeLabel} Miqaat Created: {miqaat.MiqaatName}";
+        var body = $@"
+            <html>
+            <body>
+                <h2>New {typeLabel} Miqaat Created</h2>
+                <p>A new {typeLabel} Miqaat has been created and is now available.</p>
+                <p><strong>Details:</strong></p>
+                <ul>
+                    <li><strong>Miqaat Name:</strong> {miqaat.MiqaatName}</li>
+                    <li><strong>Type:</strong> {typeLabel}</li>
+                    {(miqaatType == "Local" ? $"<li><strong>Jamaat:</strong> {miqaat.Jamaat}</li>" : "")}
+                    {(miqaatType == "Local" ? $"<li><strong>Jamiyat:</strong> {miqaat.Jamiyat}</li>" : "")}
+                    <li><strong>From Date:</strong> {miqaat.FromDate:yyyy-MM-dd}</li>
+                    <li><strong>Till Date:</strong> {miqaat.TillDate:yyyy-MM-dd}</li>
+                    <li><strong>Volunteer Limit:</strong> {miqaat.VolunteerLimit}</li>
+                    <li><strong>Created By:</strong> {miqaat.CaptainName}</li>
+                    {(string.IsNullOrWhiteSpace(miqaat.AboutMiqaat) ? "" : $"<li><strong>About:</strong> {miqaat.AboutMiqaat}</li>")}
+                </ul>
+                <p>Status: <strong>{statusText}</strong></p>
+                <p>Please check the app for enrollment details.</p>
+            </body>
+            </html>";
+
+        bool sendToAll = miqaatType == "International" && string.IsNullOrWhiteSpace(miqaat.Jamaat);
+
+        if (sendToAll)
+        {
+            var allMembers = await _userRepository.List();
+            var memberEmails = allMembers
+                .Where(m => !string.IsNullOrWhiteSpace(m.email) && (m.isActive == true || m.isActive == null))
+                .Select(m => m.email)
+                .Distinct()
+                .ToList();
+
+            if (memberEmails.Any())
+            {
+                await _emailService.SendBulkEmailAsync(memberEmails, subject, body);
+            }
+        }
+        else
+        {
+            var emailList = new List<string>();
+
+            var adminEmails = await _userRepository.GetAdminEmailsAsync();
+            emailList.AddRange(adminEmails);
+
+            if (!string.IsNullOrWhiteSpace(miqaat.Jamaat))
+            {
+                var jamaatList = miqaat.Jamaat.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                              .Select(j => j.Trim())
+                                              .ToList();
+
+                foreach (var j in jamaatList)
+                {
+                    var members = await _userRepository.GetMembersByJamaatAsync(j);
+                    var memberEmails = members
+                        .Where(m => !string.IsNullOrWhiteSpace(m.Email))
+                        .Select(m => m.Email)
+                        .ToList();
+                    emailList.AddRange(memberEmails);
+                }
+            }
+
+            var captain = await _userRepository.GetCaptainByFullNameAsync(miqaat.CaptainName);
+            if (captain != null && !string.IsNullOrWhiteSpace(captain.Email))
+            {
+                emailList.Add(captain.Email);
+            }
+
+            emailList = emailList.Distinct().ToList();
+            if (emailList.Any())
+            {
+                await _emailService.SendBulkEmailAsync(emailList, subject, body);
+            }
+        }
+    }
+
     public async Task<List<MiqaatResponse>> GetMiqaatsByMemberId(int memberId)
     {
         var miqaats = await _miqaatMemberRepository.GetMiqaatsByMemberId(memberId);
@@ -747,9 +846,23 @@ public class MiqaatService : IMiqaatService
         )).ToList();
     }
 
-    public async Task<List<EnrolledMemberResponse>> GetAllMembersByMiqaatId(long miqaatId)
+    public async Task<List<EnrolledMemberResponse>> GetAllMembersByMiqaatId(long miqaatId, string? captainJamaat = null)
     {
         var membersWithStatus = await _miqaatMemberRepository.GetAllMembersByMiqaatId(miqaatId);
+        
+        // If captainJamaat is provided, filter to only show members from that jamaat
+        if (!string.IsNullOrWhiteSpace(captainJamaat))
+        {
+            var captainJamaatTrimmed = captainJamaat.Trim();
+            membersWithStatus = membersWithStatus
+                .Where(ms => string.Equals(
+                    ms.Member.Jamaat?.Trim(), 
+                    captainJamaatTrimmed, 
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        
+        var memberIds = membersWithStatus.Select(ms => ms.Member.Id).ToHashSet();
         var finalStatuses = await _miqaatMemberRepository.GetFinalStatusesByMiqaatId(miqaatId);
         var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId, 1);
         
@@ -801,6 +914,61 @@ public class MiqaatService : IMiqaatService
             attendanceStatuses.GetValueOrDefault(m.Id),
             "Enrolled"  // These members are fully approved
         )).ToList();
+    }
+
+    /// <summary>
+    /// Checks whether the attendance window is currently open for a given miqaat and day.
+    /// Returns window status and timing information.
+    /// </summary>
+    public AttendanceWindowInfo GetAttendanceWindowInfo(long miqaatId, DateTime fromDate, DateTime tillDate, int miqaatDays, int day)
+    {
+        var nowIst = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, IndiaTimeZone);
+
+        DateTime windowStart;
+        DateTime windowEnd;
+        string dayLabel;
+
+        if (miqaatDays == 1)
+        {
+            // Single-day miqaat: allowed from from_date until 24 hours after till_date
+            windowStart = fromDate.Date;
+            windowEnd = tillDate.Date.AddDays(2); // till_date end of day + 24 hours = till_date + 2 days at 00:00
+            dayLabel = fromDate.ToString("dd MMM yyyy");
+        }
+        else
+        {
+            // Multi-day miqaat: each day from that day's date until 24 hours after that day
+            var dayDate = fromDate.Date.AddDays(day - 1);
+            windowStart = dayDate;
+            windowEnd = dayDate.AddDays(2); // day end + 24 hours = day + 2 days at 00:00
+            dayLabel = $"Day {day} ({dayDate:dd MMM yyyy})";
+        }
+
+        bool isOpen = nowIst >= windowStart && nowIst <= windowEnd;
+        bool isUpcoming = nowIst < windowStart;
+        bool isExpired = nowIst > windowEnd;
+
+        string message;
+        if (isOpen)
+        {
+            var remaining = windowEnd - nowIst;
+            if (remaining.TotalHours < 1)
+                message = $"Attendance window closing soon! Only {remaining.Minutes} minute(s) remaining.";
+            else if (remaining.TotalHours < 24)
+                message = $"Attendance window open. Closes in {(int)remaining.TotalHours}h {remaining.Minutes}m.";
+            else
+                message = $"Attendance window is open for {dayLabel}. Closes on {windowEnd:dd MMM yyyy hh:mm tt}.";
+        }
+        else if (isUpcoming)
+        {
+            message = $"Attendance window for {dayLabel} opens on {windowStart:dd MMM yyyy}.";
+        }
+        else
+        {
+            message = $"Attendance window for {dayLabel} has closed. It was open until {windowEnd:dd MMM yyyy hh:mm tt}.";
+        }
+
+        return new AttendanceWindowInfo(isOpen, isUpcoming, isExpired, windowStart, windowEnd, message, dayLabel);
     }
     
     public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days)
@@ -1001,6 +1169,33 @@ public class MiqaatService : IMiqaatService
         if (day > miqaat.MiqaatDays)
         {
             throw new Exception($"Day must be between 1 and {miqaat.MiqaatDays}");
+        }
+
+        // ── Attendance Time Window Validation ────────────────────────────────
+        var nowIst = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, IndiaTimeZone);
+
+        if (miqaat.MiqaatDays == 1)
+        {
+            // Single-day miqaat: allowed from from_date until 24 hours after till_date
+            var windowStart = miqaat.FromDate.Date; // Start of from_date (00:00)
+            var windowEnd = miqaat.TillDate.Date.AddDays(1).AddHours(24); // 24 hours after till_date ends (i.e. till_date + 2 days at 00:00)
+            if (nowIst < windowStart || nowIst > windowEnd)
+            {
+                var endDisplay = miqaat.TillDate.Date.AddDays(2).ToString("dd MMM yyyy hh:mm tt");
+                throw new Exception($"Attendance window closed. Attendance can only be marked from {miqaat.FromDate:dd MMM yyyy} until {endDisplay} (24 hours after miqaat ends).");
+            }
+        }
+        else
+        {
+            // Multi-day miqaat: each day can be marked from that day's date until 24 hours after that day
+            var dayDate = miqaat.FromDate.Date.AddDays(day - 1);
+            var windowStart = dayDate; // Start of that day (00:00)
+            var windowEnd = dayDate.AddHours(48); // 24 hours after that day ends (dayDate + 2 days at 00:00)
+            if (nowIst < windowStart || nowIst > windowEnd)
+            {
+                var endDisplay = dayDate.AddDays(2).ToString("dd MMM yyyy hh:mm tt");
+                throw new Exception($"Attendance window closed for Day {day} ({dayDate:dd MMM yyyy}). Attendance can be marked until {endDisplay} (24 hours after that day).");
+            }
         }
 
         await _miqaatMemberRepository.MarkAttendanceBatch(miqaatId, day, memberIds);
