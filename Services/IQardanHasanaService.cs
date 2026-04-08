@@ -1,0 +1,19 @@
+using BurhaniGuards.Api.Contracts.Requests;
+using BurhaniGuards.Api.Contracts.Responses;
+using BurhaniGuards.Api.ViewModel;
+
+namespace BurhaniGuards.Api.Services;
+
+public interface IQardanHasanaService
+{
+    Task<QardanHasanaResponse> Create(CreateQardanHasanaRequest request, CurrentUserViewModel currentUser);
+    Task<QardanHasanaResponse?> GetById(int id);
+    Task<List<QardanHasanaListResponse>> GetAll(string? statusFilter = null);
+    Task<List<QardanHasanaListResponse>> GetMyApplications(int memberId);
+    Task<List<QardanHasanaListResponse>> GetByJamaat(string jamaat);
+    Task Sanction(int id, SanctionQardanHasanaRequest request, string? adminSignatureUrl, string? adminFormImageUrl, int adminId);
+    Task Reject(int id, RejectQardanHasanaRequest request, int adminId);
+    Task<List<JamaatMemberResponse>> GetMembersByJamaat(string jamaat, int excludeMemberId);
+    Task<JamaatMemberResponse?> GetCaptainByJamaat(string jamaat);
+    Task<byte[]> GeneratePdf(int id);
+}

@@ -2,6 +2,7 @@ using BurhaniGuards.Api.BusinessModel;
 using BurhaniGuards.Api.Contracts.Requests;
 using BurhaniGuards.Api.Contracts.Responses;
 using BurhaniGuards.Api.Repositories;
+using BurhaniGuards.Api.ViewModel;
 
 namespace BurhaniGuards.Api.Services;
 
@@ -12,20 +13,25 @@ public class MiqaatService : IMiqaatService
     private readonly IUserRepository _userRepository;
     private readonly IEmailService _emailService;
     private readonly IActivityLogService _activityLogService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private static readonly TimeZoneInfo IndiaTimeZone = GetIndiaTimeZone();
+
+    private CurrentUserViewModel? GetCurrentUser() => _httpContextAccessor.HttpContext?.Items["User"] as CurrentUserViewModel;
 
     public MiqaatService(
         IMiqaatRepository miqaatRepository, 
         IMiqaatMemberRepository miqaatMemberRepository,
         IUserRepository userRepository,
         IEmailService emailService,
-        IActivityLogService activityLogService)
+        IActivityLogService activityLogService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _miqaatRepository = miqaatRepository;
         _miqaatMemberRepository = miqaatMemberRepository;
         _userRepository = userRepository;
         _emailService = emailService;
         _activityLogService = activityLogService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private static TimeZoneInfo GetIndiaTimeZone()
@@ -197,7 +203,8 @@ public class MiqaatService : IMiqaatService
         }
 
         // Log activity
-        _ = _activityLogService.LogMiqaatCreatedByAdminAsync(id, request.MiqaatName, adminName, null, miqaatType, request.Jamaat ?? "");
+        var currentUser = GetCurrentUser();
+        _ = _activityLogService.LogMiqaatCreatedByAdminAsync(id, request.MiqaatName, adminName, currentUser?.id, miqaatType, request.Jamaat ?? "");
 
         // Seed miqaat_members for the jamaat(s)
         if (!string.IsNullOrWhiteSpace(request.Jamaat))
@@ -362,12 +369,13 @@ public class MiqaatService : IMiqaatService
         await _miqaatRepository.Update(existingMiqaat);
 
         // Log miqaat update
-        _ = _activityLogService.LogMiqaatUpdatedAsync(id, request.MiqaatName, "Admin", null, "Admin");
+        var currentUser = GetCurrentUser();
+        _ = _activityLogService.LogMiqaatUpdatedAsync(id, request.MiqaatName, currentUser?.fullName ?? "Admin", currentUser?.id, "Admin");
 
         // Log approval change if it happened
         if (newApprovalStatus.HasValue)
         {
-            _ = _activityLogService.LogMiqaatApprovalChangedAsync(id, request.MiqaatName, "Admin", null, previousApprovalStatus.ToString(), newApprovalStatus.Value.ToString());
+            _ = _activityLogService.LogMiqaatApprovalChangedAsync(id, request.MiqaatName, currentUser?.fullName ?? "Admin", currentUser?.id, previousApprovalStatus.ToString(), newApprovalStatus.Value.ToString());
         }
 
         // Only seed miqaat_members after admin approval is set to Approved
@@ -403,7 +411,8 @@ public class MiqaatService : IMiqaatService
         await _miqaatRepository.Update(existingMiqaat);
 
         // Log approval status change
-        _ = _activityLogService.LogMiqaatApprovalChangedAsync(id, existingMiqaat.MiqaatName, "Admin", null, previousApprovalStatus.ToString(), parsedStatus.ToString());
+        var currentUser = GetCurrentUser();
+        _ = _activityLogService.LogMiqaatApprovalChangedAsync(id, existingMiqaat.MiqaatName, currentUser?.fullName ?? "Admin", currentUser?.id, previousApprovalStatus.ToString(), parsedStatus.ToString());
 
         // Only seed miqaat_members after admin approval is set to Approved
         // UpsertMembersForMiqaat uses ON DUPLICATE KEY UPDATE, so it's safe to call multiple times
@@ -541,7 +550,8 @@ public class MiqaatService : IMiqaatService
         }
 
         // Log before deletion
-        _ = _activityLogService.LogMiqaatDeletedAsync(id, existingMiqaat.MiqaatName, "Admin", null, "Admin");
+        var currentUser = GetCurrentUser();
+        _ = _activityLogService.LogMiqaatDeletedAsync(id, existingMiqaat.MiqaatName, currentUser?.fullName ?? "Admin", currentUser?.id, "Admin");
 
         await _miqaatRepository.Delete(id);
     }
@@ -1041,6 +1051,9 @@ public class MiqaatService : IMiqaatService
     {
         await _miqaatMemberRepository.UpdateAdminStatus(memberId, miqaatId, adminStatus, days);
 
+        // Capture current user before Task.Run (HttpContext not available in background threads)
+        var adminUser = GetCurrentUser();
+
         // Log admin status change
         _ = Task.Run(async () =>
         {
@@ -1055,7 +1068,8 @@ public class MiqaatService : IMiqaatService
                     EntityType = BurhaniGuards.Api.BusinessModel.ActivityEntityType.MiqaatMember,
                     EntityId = memberId,
                     Action = action,
-                    PerformedBy = "Admin",
+                    PerformedBy = adminUser?.fullName ?? "Admin",
+                    PerformedById = adminUser?.id,
                     PerformedByRole = "Admin",
                     TargetMemberId = memberId,
                     TargetMemberName = memberName,
