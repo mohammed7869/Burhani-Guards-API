@@ -13,7 +13,9 @@ public interface IQardanHasanaService
     Task<List<QardanHasanaListResponse>> GetByJamaat(string jamaat);
     Task Sanction(int id, SanctionQardanHasanaRequest request, string? adminSignatureUrl, string? adminFormImageUrl, int adminId);
     Task Reject(int id, RejectQardanHasanaRequest request, int adminId);
+    Task CaptainApprove(int applicationId, int captainMemberId);
     Task<List<JamaatMemberResponse>> GetMembersByJamaat(string jamaat, int excludeMemberId);
     Task<JamaatMemberResponse?> GetCaptainByJamaat(string jamaat);
     Task<byte[]> GeneratePdf(int id);
+    Task<bool> HasActiveApplication(int memberId);
 }

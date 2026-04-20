@@ -24,6 +24,8 @@ public class QardanHasanaResponse
     public int CaptainMemberId { get; set; }
     public string CaptainName { get; set; } = string.Empty;
     public string? CaptainMobile { get; set; }
+    public bool CaptainApproved { get; set; }
+    public DateTime? CaptainApprovedAt { get; set; }
 
     // Guarantor 2: Member
     public int GuarantorMemberId { get; set; }
@@ -63,6 +65,8 @@ public class QardanHasanaListResponse
     public decimal AmountRequested { get; set; }
     public decimal? SanctionedAmount { get; set; }
     public string Status { get; set; } = string.Empty;
+    public bool CaptainApproved { get; set; }
+    public int CaptainMemberId { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -75,4 +79,16 @@ public class JamaatMemberResponse
     public string FullName { get; set; } = string.Empty;
     public string? Contact { get; set; }
     public string ItsId { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Basic member info for internal lookups with proper column aliasing
+/// </summary>
+public class MemberBasicInfo
+{
+    public int Id { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string? Contact { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public int? JamaatId { get; set; }
 }

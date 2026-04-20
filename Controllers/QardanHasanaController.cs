@@ -40,6 +40,26 @@ public class QardanHasanaController : BaseController
     }
 
     /// <summary>
+    /// Check if the current user can apply for Qardan Hasana
+    /// </summary>
+    [HttpGet("can-apply")]
+    public async Task<IActionResult> CanApply()
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        try
+        {
+            var hasActive = await _service.HasActiveApplication(CurrentUser.id);
+            return Ok(new { canApply = !hasActive });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get all Qardan Hasana applications (Admin sees all, Captain sees jamaat, Member sees own)
     /// </summary>
     [HttpGet]
@@ -251,6 +271,27 @@ public class QardanHasanaController : BaseController
         {
             var pdfBytes = await _service.GeneratePdf(id);
             return File(pdfBytes, "text/html", $"Qardan_Hasana_{id}.html");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("{id}/captain-approve")]
+    public async Task<IActionResult> CaptainApprove(int id)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        // Only Captains (role=2) can approve
+        if (CurrentUser.roles != 2)
+            return Forbid();
+
+        try
+        {
+            await _service.CaptainApprove(id, CurrentUser.id);
+            return Ok(new { message = "Application approved by Captain successfully." });
         }
         catch (Exception ex)
         {

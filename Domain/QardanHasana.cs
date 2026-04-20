@@ -26,6 +26,8 @@ public sealed class QardanHasana
     public int CaptainMemberId { get; init; }
     public string CaptainName { get; init; } = string.Empty;
     public string? CaptainMobile { get; init; }
+    public bool CaptainApproved { get; init; }
+    public DateTime? CaptainApprovedAt { get; init; }
 
     // Guarantor 2: Member
     public int GuarantorMemberId { get; init; }

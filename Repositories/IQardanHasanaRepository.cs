@@ -29,4 +29,8 @@ public interface IQardanHasanaRepository
 
     Task<List<JamaatMemberResponse>> GetMembersByJamaat(string jamaat, int excludeMemberId);
     Task<JamaatMemberResponse?> GetCaptainByJamaat(string jamaat);
+    Task<MemberBasicInfo?> GetMemberById(int id);
+    Task CaptainApprove(int id);
+    Task<List<MemberBasicInfo>> GetResourceAdmins();
+    Task<bool> HasActiveApplication(int memberId);
 }

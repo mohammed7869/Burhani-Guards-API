@@ -42,19 +42,30 @@ public class QardanHasanaService : IQardanHasanaService
         if (request.GuarantorMemberId <= 0)
             throw new Exception("Guarantor member is required.");
 
+        // Check for existing active application
+        var hasActive = await _repository.HasActiveApplication(currentUser.id);
+        if (hasActive)
+            throw new Exception("You already have an active Qardan Hasana application. You cannot apply again until your current application is completed or rejected.");
+
         // Get Captain of the applicant's jamaat
         var captain = await _repository.GetCaptainByJamaat(currentUser.jamaat ?? "");
         if (captain == null)
             throw new Exception("No Captain found for your Mohallah. Please contact admin.");
 
-        // Get guarantor member details
-        var guarantorMember = await _memberRepository.SelectMember(request.GuarantorMemberId);
+        // Get guarantor member details (using explicit column aliasing for proper mapping)
+        var guarantorMember = await _repository.GetMemberById(request.GuarantorMemberId);
         if (guarantorMember == null)
             throw new Exception("Selected guarantor member not found.");
 
-        // Generate application number: QH-YYYYMMDD-XXXX
+        // Get applicant member details for JamaatId
+        var applicantMember = await _repository.GetMemberById(currentUser.id);
+
+        // Check if the applicant IS the captain (captain applying for themselves)
+        var isCaptainApplying = currentUser.id == captain.Id;
+
+        // Generate application number: QH-YYYYMMDD-XXXX (using IST)
         var count = await _repository.GetNextApplicationCount();
-        var applicationNo = $"QH-{DateTime.UtcNow:yyyyMMdd}-{count:D4}";
+        var applicationNo = $"QH-{GetIstNow():yyyyMMdd}-{count:D4}";
 
         // Create application
         var id = await _repository.Create(
@@ -63,7 +74,7 @@ public class QardanHasanaService : IQardanHasanaService
             applicantItsId: currentUser.itsId ?? "",
             applicantName: request.ApplicantName,
             applicantJamaat: currentUser.jamaat ?? "",
-            applicantJamaatId: null,
+            applicantJamaatId: applicantMember?.JamaatId,
             applicantOccupation: request.ApplicantOccupation,
             applicantMobile: request.ApplicantMobile,
             reason: request.Reason,
@@ -78,6 +89,14 @@ public class QardanHasanaService : IQardanHasanaService
             guarantorName: guarantorMember.FullName,
             guarantorMobile: guarantorMember.Contact
         );
+
+        // If captain is applying, auto-approve captain_approved
+        if (isCaptainApplying)
+        {
+            await _repository.CaptainApprove(id);
+            _logger.LogInformation("Captain {CaptainName} applied for Qardan Hasana - auto-approved as captain. Application {AppNo}",
+                captain.FullName, applicationNo);
+        }
 
         _logger.LogInformation("Qardan Hasana application {ApplicationNo} created by {ApplicantName} (ID: {MemberId})",
             applicationNo, request.ApplicantName, currentUser.id);
@@ -364,4 +383,80 @@ public class QardanHasanaService : IQardanHasanaService
     }
 
     #endregion
+
+    public async Task CaptainApprove(int applicationId, int captainMemberId)
+    {
+        // Get application
+        var application = await _repository.GetById(applicationId);
+        if (application == null)
+            throw new Exception("Application not found.");
+
+        // Verify caller is the Captain assigned to this application
+        if (application.CaptainMemberId != captainMemberId)
+            throw new Exception("Only the assigned Captain can approve this application.");
+
+        // Check if already approved
+        if (application.CaptainApproved)
+            throw new Exception("This application has already been approved by the Captain.");
+
+        // Mark as captain-approved
+        await _repository.CaptainApprove(applicationId);
+
+        _logger.LogInformation("Qardan Hasana application {Id} ({AppNo}) captain-approved by member {CaptainId}",
+            applicationId, application.ApplicationNo, captainMemberId);
+
+        // Send email to all Resource Admins (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var admins = await _repository.GetResourceAdmins();
+                foreach (var admin in admins)
+                {
+                    if (string.IsNullOrWhiteSpace(admin.Email)) continue;
+
+                    var subject = $"Qardan Hasana Approved by Captain - {application.ApplicationNo}";
+                    var body = $@"
+<h2 style='color: #4A1C1C;'>Qardan Hasana - Captain Approval Notification</h2>
+<p>Dear {admin.FullName},</p>
+<p>The following Qardan Hasana application has been <strong style='color: green;'>approved by the Captain</strong>:</p>
+<table style='border-collapse: collapse; width: 100%; max-width: 500px;'>
+    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Application No</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.ApplicationNo}</td></tr>
+    <tr><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Applicant Name</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.ApplicantName}</td></tr>
+    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Mohallah</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.ApplicantJamaat}</td></tr>
+    <tr><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Amount Requested</td><td style='padding: 8px; border: 1px solid #ddd;'>₹{application.AmountRequested:N2}</td></tr>
+    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Reason</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.Reason ?? "—"}</td></tr>
+    <tr><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Captain</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.CaptainName}</td></tr>
+    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Guarantor</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.GuarantorName}</td></tr>
+</table>
+<p>Please review this application in the BGP Admin Portal.</p>
+<p style='color: #999; font-size: 12px;'>This is an automated notification from Burhani Guards Pune.</p>";
+
+                    await _emailService.SendEmailAsync(admin.Email, subject, body);
+                }
+
+                _logger.LogInformation("Captain approval emails sent to {Count} admins for application {AppNo}",
+                    admins.Count, application.ApplicationNo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to send captain approval emails for application {Id}: {Error}",
+                    applicationId, ex.Message);
+            }
+        });
+    }
+
+    public async Task<bool> HasActiveApplication(int memberId)
+    {
+        return await _repository.HasActiveApplication(memberId);
+    }
+
+    /// <summary>
+    /// Returns the current date/time in India Standard Time (IST = UTC+5:30)
+    /// </summary>
+    private static DateTime GetIstNow()
+    {
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, istZone);
+    }
 }

@@ -12,6 +12,15 @@ public class QardanHasanaRepository : IQardanHasanaRepository
         _context = context;
     }
 
+    /// <summary>
+    /// Returns the current date/time in India Standard Time (IST = UTC+5:30)
+    /// </summary>
+    private static DateTime GetIstNow()
+    {
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, istZone);
+    }
+
     public async Task<int> Create(
         string applicationNo, int applicantMemberId, string applicantItsId,
         string applicantName, string applicantJamaat, int? applicantJamaatId,
@@ -69,7 +78,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
             GuarantorMemberId = guarantorMemberId,
             GuarantorName = guarantorName,
             GuarantorMobile = guarantorMobile,
-            Now = DateTime.UtcNow
+            Now = GetIstNow()
         });
 
         return id;
@@ -94,6 +103,8 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 captain_member_id AS CaptainMemberId,
                 captain_name AS CaptainName,
                 captain_mobile AS CaptainMobile,
+                captain_approved AS CaptainApproved,
+                captain_approved_at AS CaptainApprovedAt,
                 guarantor_member_id AS GuarantorMemberId,
                 guarantor_name AS GuarantorName,
                 guarantor_mobile AS GuarantorMobile,
@@ -130,6 +141,8 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 amount_requested AS AmountRequested,
                 sanctioned_amount AS SanctionedAmount,
                 status AS Status,
+                captain_approved AS CaptainApproved,
+                captain_member_id AS CaptainMemberId,
                 created_at AS CreatedAt
             FROM qardan_hasana
         ";
@@ -157,6 +170,8 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 amount_requested AS AmountRequested,
                 sanctioned_amount AS SanctionedAmount,
                 status AS Status,
+                captain_approved AS CaptainApproved,
+                captain_member_id AS CaptainMemberId,
                 created_at AS CreatedAt
             FROM qardan_hasana
             WHERE applicant_member_id = @MemberId
@@ -179,6 +194,8 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 amount_requested AS AmountRequested,
                 sanctioned_amount AS SanctionedAmount,
                 status AS Status,
+                captain_approved AS CaptainApproved,
+                captain_member_id AS CaptainMemberId,
                 created_at AS CreatedAt
             FROM qardan_hasana
             WHERE applicant_jamaat = @Jamaat
@@ -201,7 +218,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
     {
         var sql = @"UPDATE qardan_hasana SET status = @Status, updated_at = @Now WHERE id = @Id";
         using var connection = _context.CreateConnection();
-        await connection.ExecuteAsync(sql, new { Id = id, Status = status, Now = DateTime.UtcNow });
+        await connection.ExecuteAsync(sql, new { Id = id, Status = status, Now = GetIstNow() });
     }
 
     public async Task UpdateFormImage(int id, string formImageUrl)
@@ -213,7 +230,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 updated_at = @Now 
             WHERE id = @Id";
         using var connection = _context.CreateConnection();
-        await connection.ExecuteAsync(sql, new { Id = id, FormImageUrl = formImageUrl, Now = DateTime.UtcNow });
+        await connection.ExecuteAsync(sql, new { Id = id, FormImageUrl = formImageUrl, Now = GetIstNow() });
     }
 
     public async Task Sanction(int id, decimal sanctionedAmount, decimal installmentAmount,
@@ -248,7 +265,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
             AdminSignatureUrl = adminSignatureUrl,
             AdminFormImageUrl = adminFormImageUrl,
             AdminApprovedBy = adminApprovedBy,
-            Now = DateTime.UtcNow
+            Now = GetIstNow()
         });
     }
 
@@ -265,7 +282,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
         ";
 
         using var connection = _context.CreateConnection();
-        await connection.ExecuteAsync(sql, new { Id = id, Reason = reason, AdminId = adminId, Now = DateTime.UtcNow });
+        await connection.ExecuteAsync(sql, new { Id = id, Reason = reason, AdminId = adminId, Now = GetIstNow() });
     }
 
     public async Task<List<JamaatMemberResponse>> GetMembersByJamaat(string jamaat, int excludeMemberId)
@@ -306,5 +323,74 @@ public class QardanHasanaRepository : IQardanHasanaRepository
 
         using var connection = _context.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<JamaatMemberResponse>(sql, new { Jamaat = jamaat });
+    }
+
+    public async Task<MemberBasicInfo?> GetMemberById(int id)
+    {
+        var sql = @"
+            SELECT 
+                `id` AS Id,
+                `full_name` AS FullName,
+                `contact` AS Contact,
+                `email` AS Email,
+                `jamaat_id` AS JamaatId
+            FROM `members`
+            WHERE `id` = @Id
+        ";
+
+        using var connection = _context.CreateConnection();
+        return await connection.QueryFirstOrDefaultAsync<MemberBasicInfo>(sql, new { Id = id });
+    }
+
+    public async Task CaptainApprove(int id)
+    {
+        var sql = @"
+            UPDATE qardan_hasana SET
+                captain_approved = 1,
+                captain_approved_at = @Now,
+                updated_at = @Now
+            WHERE id = @Id
+        ";
+
+        using var connection = _context.CreateConnection();
+        await connection.ExecuteAsync(sql, new { Id = id, Now = GetIstNow() });
+    }
+
+    public async Task<List<MemberBasicInfo>> GetResourceAdmins()
+    {
+        var sql = @"
+            SELECT 
+                `id` AS Id,
+                `full_name` AS FullName,
+                `contact` AS Contact,
+                `email` AS Email,
+                `jamaat_id` AS JamaatId
+            FROM `members`
+            WHERE `roles` = 7
+              AND `is_active` = 1
+        ";
+
+        using var connection = _context.CreateConnection();
+        var result = await connection.QueryAsync<MemberBasicInfo>(sql);
+        return result.ToList();
+    }
+
+    public async Task<bool> HasActiveApplication(int memberId)
+    {
+        var sql = @"
+            SELECT COUNT(*) FROM qardan_hasana 
+            WHERE applicant_member_id = @MemberId
+            AND (
+                -- Pending or in-process (not yet sanctioned/rejected)
+                status IN ('pending', 'submitted_to_admin')
+                OR
+                -- Sanctioned with ongoing installments
+                (status = 'sanctioned' AND installment_date_to >= CURDATE())
+            )
+        ";
+
+        using var connection = _context.CreateConnection();
+        var count = await connection.ExecuteScalarAsync<int>(sql, new { MemberId = memberId });
+        return count > 0;
     }
 }
