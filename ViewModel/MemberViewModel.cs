@@ -22,6 +22,7 @@ public class MemberViewModel
     public string? passwordHash { get; set; }
     public string? newPasswordHash { get; set; }
     public bool isActive { get; set; } = true;
+    public string? badge { get; set; }
     public DateTime createdAt { get; set; }
     public DateTime updatedAt { get; set; }
 }

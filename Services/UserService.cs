@@ -461,6 +461,7 @@ public class UserService : IUserService
             newPasswordHash = user.NewPasswordHash,
             isActive = user.IsActive,
             isApproved = user.IsApproved,
+            badge = user.Badge,
             createdAt = user.CreatedAt,
             updatedAt = user.UpdatedAt
         };

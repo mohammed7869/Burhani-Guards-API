@@ -24,6 +24,7 @@ public class UserViewModel
     public string? newPasswordHash { get; set; }
     public bool isActive { get; set; } = true;
     public bool isApproved { get; set; } = true;
+    public string? badge { get; set; }
     public DateTime createdAt { get; set; }
     public DateTime updatedAt { get; set; }
 }
@@ -47,6 +48,7 @@ public class UserListViewModel
     public DateTime? dateOfBirth { get; set; }
     public bool isActive { get; set; }
     public bool isApproved { get; set; }
+    public string? badge { get; set; }
     public DateTime createdAt { get; set; }
     public DateTime updatedAt { get; set; }
 }

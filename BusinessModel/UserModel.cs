@@ -59,6 +59,9 @@ public class UserModel : BaseModel
     [Column("is_approved")]
     public bool IsApproved { get; set; } = true;
 
+    [Column("badge")]
+    public string? Badge { get; set; } = "BGI";
+
     [Column("created_by")]
     public string? CreatedBy { get; set; }
 

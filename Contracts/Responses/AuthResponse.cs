@@ -14,6 +14,7 @@ public sealed record AuthResponse(
     int? Age,
     string? Contact,
     DateTime? DateOfBirth,
+    string? Badge,
     string Role,
     string Token,
     bool RequiresPasswordChange = false,

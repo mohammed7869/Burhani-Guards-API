@@ -25,6 +25,7 @@ public class MemberModel : BaseModel
     public DateTime? OtpValidTill { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsApproved { get; set; } = true;
+    public string? Badge { get; set; } = "BGI";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

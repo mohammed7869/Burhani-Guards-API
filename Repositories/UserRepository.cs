@@ -233,6 +233,7 @@ public class UserRepository : IUserRepository
                 u.`date_of_birth` AS dateOfBirth,
                 u.`is_active` AS isActive,
                 u.`is_approved` AS isApproved,
+                u.`badge`,
                 u.`created_at` AS createdAt,
                 u.`updated_at` AS updatedAt
             FROM `members` u
@@ -273,6 +274,7 @@ public class UserRepository : IUserRepository
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
                     `is_approved` AS IsApproved,
+                    `badge` AS Badge,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `members` 
@@ -315,6 +317,7 @@ public class UserRepository : IUserRepository
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
                     `is_approved` AS IsApproved,
+                    `badge` AS Badge,
                     `created_by` AS CreatedBy,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
@@ -404,6 +407,7 @@ public class UserRepository : IUserRepository
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
                     `is_approved` AS IsApproved,
+                    `badge` AS Badge,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `members` 
@@ -442,6 +446,7 @@ public class UserRepository : IUserRepository
                     `new_password_hash` AS NewPasswordHash,
                     `is_active` AS IsActive,
                     `is_approved` AS IsApproved,
+                    `badge` AS Badge,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `members` 
