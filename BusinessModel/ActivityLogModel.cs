@@ -53,6 +53,10 @@ public static class ActivityAction
     public const string MemberActivated = "MEMBER_ACTIVATED";
     public const string MemberDeactivated = "MEMBER_DEACTIVATED";
     public const string MemberApprovedByAdmin = "MEMBER_APPROVED_BY_ADMIN";
+
+    // Survey
+    public const string SurveySubmitted = "SURVEY_SUBMITTED";
+    public const string SurveyUpdated = "SURVEY_UPDATED";
 }
 
 /// <summary>
@@ -63,4 +67,5 @@ public static class ActivityEntityType
     public const string Miqaat = "Miqaat";
     public const string MiqaatMember = "MiqaatMember";
     public const string Member = "Member";
+    public const string Survey = "Survey";
 }

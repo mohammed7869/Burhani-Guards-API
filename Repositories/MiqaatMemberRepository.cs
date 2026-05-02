@@ -160,6 +160,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`about_miqaat` AS AboutMiqaat,
                 m.`admin_approval` AS AdminApproval,
                 m.`captain_name` AS CaptainName,
+                m.`is_admin_created` AS IsAdminCreated,
                 m.`created_at` AS CreatedAt,
                 m.`updated_at` AS UpdatedAt,
                 mm.`MemberStatus` AS MemberStatus,
@@ -242,7 +243,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     WHEN lm.`admin_approval` = 'Approved'
                      AND mm.`status` = 'Approved'
                      AND mm.`final_status` = 'Approved'
-                     AND (lm.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
+                     AND ((lm.`miqaat_type` != 'International' AND lm.`is_admin_created` = 0) OR mm.`admin_status` = 'Approved')
                     THEN IFNULL(mm.`points`, 0)
                     ELSE 0
                 END), 0) AS TotalPoints
@@ -272,7 +273,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     WHEN lm.`admin_approval` = 'Approved'
                      AND mm.`status` = 'Approved'
                      AND mm.`final_status` = 'Approved'
-                     AND (lm.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
+                     AND ((lm.`miqaat_type` != 'International' AND lm.`is_admin_created` = 0) OR mm.`admin_status` = 'Approved')
                     THEN IFNULL(mm.`points`, 0)
                     ELSE 0
                 END), 0) AS TotalPoints
@@ -308,7 +309,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     WHEN lm.`admin_approval` = 'Approved'
                      AND mm.`status` = 'Approved'
                      AND mm.`final_status` = 'Approved'
-                     AND (lm.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
+                     AND ((lm.`miqaat_type` != 'International' AND lm.`is_admin_created` = 0) OR mm.`admin_status` = 'Approved')
                     THEN IFNULL(mm.`points`, 0)
                     ELSE 0
                 END), 0) AS TotalPoints
@@ -515,7 +516,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 AND mm.`status` = 'Approved'
                 AND mm.`final_status` = 'Approved'
                 AND (
-                    lm.`miqaat_type` != 'International' 
+                    (lm.`miqaat_type` != 'International' AND lm.`is_admin_created` = 0)
                     OR mm.`admin_status` = 'Approved'
                 )
                 AND m.`is_active` = 1
@@ -687,7 +688,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             INNER JOIN local_miqaat lm ON lm.id = mm.miqaat_id
             SET mm.admin_status = @AdminStatus
             WHERE mm.member_id = @MemberId AND mm.miqaat_id = @MiqaatId
-                AND lm.miqaat_type = 'International'
+                AND (lm.miqaat_type = 'International' OR lm.is_admin_created = 1)
                 AND mm.final_status = 'Approved'
         ";
 
@@ -706,7 +707,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
 
         if (rowsAffected == 0)
         {
-            throw new Exception("No eligible days found. Member may not have been captain-approved, or miqaat is not International.");
+            throw new Exception("No eligible days found. Member may not have been captain-approved, or miqaat is not admin-managed.");
         }
     }
 
@@ -737,7 +738,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
             INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
             WHERE mm.`miqaat_id` = @MiqaatId
-                AND lm.`miqaat_type` = 'International'
+                AND (lm.`miqaat_type` = 'International' OR lm.`is_admin_created` = 1)
                 AND mm.`status` = 'Approved'
                 AND mm.`final_status` = 'Approved'
                 AND m.`is_active` = 1

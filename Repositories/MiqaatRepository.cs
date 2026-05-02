@@ -19,9 +19,9 @@ public class MiqaatRepository : IMiqaatRepository
         {
             var sql = @"
                 INSERT INTO `local_miqaat` 
-                (`miqaat_name`, `miqaat_type`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `created_at`, `updated_at`)
+                (`miqaat_name`, `miqaat_type`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `is_admin_created`, `created_at`, `updated_at`)
                 VALUES 
-                (@MiqaatName, @MiqaatType, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @CreatedAt, @UpdatedAt);
+                (@MiqaatName, @MiqaatType, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @IsAdminCreated, @CreatedAt, @UpdatedAt);
                 SELECT LAST_INSERT_ID();";
 
             var id = await connection.QuerySingleAsync<long>(sql, new
@@ -37,6 +37,7 @@ public class MiqaatRepository : IMiqaatRepository
                 model.AboutMiqaat,
                 AdminApproval = model.AdminApproval.ToString(),
                 model.CaptainName,
+                model.IsAdminCreated,
                 CreatedAt = model.CreatedAt,
                 UpdatedAt = model.UpdatedAt
             });
@@ -68,6 +69,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `notes` AS Notes,
                     `khidmat_done` AS KhidmatDone,
                     `is_report_submitted` AS IsReportSubmitted,
+                    `is_admin_created` AS IsAdminCreated,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`
@@ -101,6 +103,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `notes` AS Notes,
                     `khidmat_done` AS KhidmatDone,
                     `is_report_submitted` AS IsReportSubmitted,
+                    `is_admin_created` AS IsAdminCreated,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`
@@ -183,6 +186,7 @@ public class MiqaatRepository : IMiqaatRepository
                     `notes` AS Notes,
                     `khidmat_done` AS KhidmatDone,
                     `is_report_submitted` AS IsReportSubmitted,
+                    `is_admin_created` AS IsAdminCreated,
                     `created_at` AS CreatedAt,
                     `updated_at` AS UpdatedAt
                 FROM `local_miqaat`

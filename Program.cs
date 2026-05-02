@@ -92,6 +92,7 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<IDapperMemberRepository, DapperMemberRepository>();
 builder.Services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
 builder.Services.AddScoped<IQardanHasanaRepository, QardanHasanaRepository>();
+builder.Services.AddScoped<ISurveyRepository, SurveyRepository>();
 
 // Register old repositories (for backward compatibility if needed)
 builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.ICaptainRepository, BurhaniGuards.Api.Repositories.SqlServer.CaptainRepository>();
@@ -105,6 +106,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IMiqaatService, MiqaatService>();
 builder.Services.AddScoped<IActivityLogService, ActivityLogService>();
 builder.Services.AddScoped<IQardanHasanaService, QardanHasanaService>();
+builder.Services.AddScoped<ISurveyService, SurveyService>();
 
 // Register old services (for backward compatibility if needed)
 builder.Services.AddScoped<ICaptainAuthService, CaptainAuthService>();

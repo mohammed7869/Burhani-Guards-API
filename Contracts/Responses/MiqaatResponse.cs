@@ -22,6 +22,7 @@ public sealed record MiqaatResponse(
     string? MiqaatImage2,
     string? Notes,
     string? KhidmatDone,
-    bool IsReportSubmitted
+    bool IsReportSubmitted,
+    bool IsAdminCreated
 );
 

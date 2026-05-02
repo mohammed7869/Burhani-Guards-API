@@ -32,5 +32,6 @@ public class MiqaatModel : BaseModel
     public string? Notes { get; set; }
     public string? KhidmatDone { get; set; }
     public bool IsReportSubmitted { get; set; }
+    public bool IsAdminCreated { get; set; }
 }
 

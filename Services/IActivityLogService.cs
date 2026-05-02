@@ -33,6 +33,9 @@ public interface IActivityLogService
     Task LogMemberDeactivatedAsync(int memberId, string memberName, string performedBy, int? performedById, string performerRole);
     Task LogMemberApprovedAsync(int memberId, string memberName, string performedBy, int? performedById, string performerRole);
 
+    // Survey
+    Task LogSurveySubmittedAsync(int memberId, string memberName, string itsId, int departmentId, string departmentName, int zoneId, string zoneName);
+
     // Retrieval
     Task<(List<ActivityLogModel> Items, int TotalCount)> GetAllAsync(
         string? entityType, string? action, long? miqaatId, int? memberId,

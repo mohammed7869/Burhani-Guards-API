@@ -190,6 +190,7 @@ public class MiqaatService : IMiqaatService
             AboutMiqaat = request.AboutMiqaat,
             AdminApproval = AdminApprovalStatus.Approved, // Auto-approved when admin creates
             CaptainName = adminName,
+            IsAdminCreated = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -671,7 +672,8 @@ public class MiqaatService : IMiqaatService
             null,
             null,
             null,
-            false
+            false,
+            m.IsAdminCreated
         )).ToList();
     }
 
@@ -683,10 +685,26 @@ public class MiqaatService : IMiqaatService
 
     public async Task<List<MiqaatResponse>> GetMiqaatsForCurrentUser(int userId, int? userRole, string? captainName)
     {
-        // If user is Captain (role = 2), return all miqaats created by them
+        // If user is Captain (role = 2), return miqaats created by them
+        // PLUS admin-created miqaats where they are enrolled as a member
+        // (International or multi-jamaat Local miqaats)
         if (userRole == 2 && !string.IsNullOrWhiteSpace(captainName))
         {
-            return await GetMiqaatsByCaptainName(captainName);
+            var captainMiqaats = await GetMiqaatsByCaptainName(captainName);
+            var memberMiqaats = await GetMiqaatsByMemberId(userId);
+            
+            // Merge: add any miqaats from memberMiqaats that aren't already in captainMiqaats
+            var captainMiqaatIds = new HashSet<long>(captainMiqaats.Select(m => m.Id));
+            var merged = new List<MiqaatResponse>(captainMiqaats);
+            foreach (var m in memberMiqaats)
+            {
+                if (!captainMiqaatIds.Contains(m.Id))
+                {
+                    merged.Add(m);
+                }
+            }
+            
+            return merged;
         }
         // If user is Member (role = 1), return miqaats from miqaat_members table
         else
@@ -1397,7 +1415,8 @@ public class MiqaatService : IMiqaatService
             includeReport ? m.MiqaatImage2 : null,
             includeReport ? m.Notes : null,
             includeReport ? m.KhidmatDone : null,
-            includeReport && m.IsReportSubmitted
+            includeReport && m.IsReportSubmitted,
+            m.IsAdminCreated
         );
     }
 

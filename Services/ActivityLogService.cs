@@ -329,6 +329,25 @@ public class ActivityLogService : IActivityLogService
         });
     }
 
+    // ─── Survey ───────────────────────────────────────────────────────────
+
+    public async Task LogSurveySubmittedAsync(int memberId, string memberName, string itsId, int departmentId, string departmentName, int zoneId, string zoneName)
+    {
+        await LogAsync(new ActivityLogModel
+        {
+            EntityType = ActivityEntityType.Survey,
+            EntityId = memberId,
+            Action = ActivityAction.SurveySubmitted,
+            PerformedBy = memberName,
+            PerformedById = memberId,
+            PerformedByRole = "Member",
+            TargetMemberId = memberId,
+            TargetMemberName = memberName,
+            Details = JsonSerializer.Serialize(new { itsId, departmentId, departmentName, zoneId, zoneName }),
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
     // ─── Retrieval ────────────────────────────────────────────────────────
 
     public async Task<(List<ActivityLogModel> Items, int TotalCount)> GetAllAsync(

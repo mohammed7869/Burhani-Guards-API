@@ -402,17 +402,17 @@ public class MiqaatController : BaseController
             return NotFound(new { message = "Miqaat not found" });
         }
 
-        if (miqaat.MiqaatType == "International")
+        if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
         {
-            // Only Admin can view attendance for International miqaats
+            // Only Admin can view attendance for International / multi-jamaat Local miqaats
             if (CurrentUser.roles != 7)
             {
-                return Forbid("Only Admin can view approved members for attendance on International miqaats");
+                return Forbid("Only Admin can view approved members for attendance on this miqaat");
             }
         }
         else
         {
-            // Only Captains can view attendance for Local miqaats
+            // Only Captains can view attendance for single-jamaat Local miqaats
             if (CurrentUser.roles != 2)
             {
                 return Forbid("Only Captains can view approved members for attendance");
@@ -591,17 +591,17 @@ public class MiqaatController : BaseController
             return NotFound(new { message = "Miqaat not found" });
         }
 
-        if (miqaat.MiqaatType == "International")
+        if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
         {
-            // Only Admin can mark attendance for International miqaats
+            // Only Admin can mark attendance for International / multi-jamaat Local miqaats
             if (CurrentUser.roles != 7)
             {
-                return Forbid("Only Admin can mark attendance for International miqaats");
+                return Forbid("Only Admin can mark attendance for this miqaat");
             }
         }
         else
         {
-            // Only Captains can mark attendance for Local miqaats
+            // Only Captains can mark attendance for single-jamaat Local miqaats
             if (CurrentUser.roles != 2)
             {
                 return Forbid("Only Captains can mark attendance");
