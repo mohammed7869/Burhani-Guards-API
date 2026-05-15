@@ -35,3 +35,17 @@ public class RejectQardanHasanaRequest
 {
     public string? Reason { get; set; }
 }
+
+/// <summary>
+/// Request to update a Qardan Hasana application (by Applicant, before captain approval)
+/// Only specific fields are editable: Name, Occupation, Mobile, Reason, Amount, Guarantor2
+/// </summary>
+public class UpdateQardanHasanaRequest
+{
+    public string ApplicantName { get; set; } = string.Empty;
+    public string? ApplicantOccupation { get; set; }
+    public string ApplicantMobile { get; set; } = string.Empty;
+    public string? Reason { get; set; }
+    public decimal AmountRequested { get; set; }
+    public int GuarantorMemberId { get; set; }
+}

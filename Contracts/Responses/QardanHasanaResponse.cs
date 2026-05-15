@@ -60,6 +60,7 @@ public class QardanHasanaListResponse
 {
     public int Id { get; set; }
     public string ApplicationNo { get; set; } = string.Empty;
+    public int ApplicantMemberId { get; set; }
     public string ApplicantName { get; set; } = string.Empty;
     public string ApplicantJamaat { get; set; } = string.Empty;
     public decimal AmountRequested { get; set; }

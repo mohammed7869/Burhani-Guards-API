@@ -299,6 +299,26 @@ public class QardanHasanaController : BaseController
         }
     }
 
+    /// <summary>
+    /// Applicant or Captain edits an application (only before captain approval)
+    /// </summary>
+    [HttpPut("{id:int}/edit")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateQardanHasanaRequest request)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        try
+        {
+            var response = await _service.UpdateApplication(id, request, CurrentUser);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     #region Private Helpers
 
     private async Task<string> SaveUploadedFile(IFormFile file, int applicationId, string prefix)

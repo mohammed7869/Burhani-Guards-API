@@ -136,6 +136,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
             SELECT 
                 id AS Id,
                 application_no AS ApplicationNo,
+                applicant_member_id AS ApplicantMemberId,
                 applicant_name AS ApplicantName,
                 applicant_jamaat AS ApplicantJamaat,
                 amount_requested AS AmountRequested,
@@ -165,6 +166,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
             SELECT 
                 id AS Id,
                 application_no AS ApplicationNo,
+                applicant_member_id AS ApplicantMemberId,
                 applicant_name AS ApplicantName,
                 applicant_jamaat AS ApplicantJamaat,
                 amount_requested AS AmountRequested,
@@ -189,6 +191,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
             SELECT 
                 id AS Id,
                 application_no AS ApplicationNo,
+                applicant_member_id AS ApplicantMemberId,
                 applicant_name AS ApplicantName,
                 applicant_jamaat AS ApplicantJamaat,
                 amount_requested AS AmountRequested,
@@ -392,5 +395,39 @@ public class QardanHasanaRepository : IQardanHasanaRepository
         using var connection = _context.CreateConnection();
         var count = await connection.ExecuteScalarAsync<int>(sql, new { MemberId = memberId });
         return count > 0;
+    }
+
+    public async Task UpdateApplication(int id, string applicantName, string? applicantOccupation,
+        string applicantMobile, string? reason, decimal amountRequested,
+        int guarantorMemberId, string guarantorName, string? guarantorMobile)
+    {
+        var sql = @"
+            UPDATE qardan_hasana SET
+                applicant_name = @ApplicantName,
+                applicant_occupation = @ApplicantOccupation,
+                applicant_mobile = @ApplicantMobile,
+                reason = @Reason,
+                amount_requested = @AmountRequested,
+                guarantor_member_id = @GuarantorMemberId,
+                guarantor_name = @GuarantorName,
+                guarantor_mobile = @GuarantorMobile,
+                updated_at = @Now
+            WHERE id = @Id
+        ";
+
+        using var connection = _context.CreateConnection();
+        await connection.ExecuteAsync(sql, new
+        {
+            Id = id,
+            ApplicantName = applicantName,
+            ApplicantOccupation = applicantOccupation,
+            ApplicantMobile = applicantMobile,
+            Reason = reason,
+            AmountRequested = amountRequested,
+            GuarantorMemberId = guarantorMemberId,
+            GuarantorName = guarantorName,
+            GuarantorMobile = guarantorMobile,
+            Now = GetIstNow()
+        });
     }
 }

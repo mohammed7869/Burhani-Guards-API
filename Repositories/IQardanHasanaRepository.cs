@@ -33,4 +33,7 @@ public interface IQardanHasanaRepository
     Task CaptainApprove(int id);
     Task<List<MemberBasicInfo>> GetResourceAdmins();
     Task<bool> HasActiveApplication(int memberId);
+    Task UpdateApplication(int id, string applicantName, string? applicantOccupation,
+        string applicantMobile, string? reason, decimal amountRequested,
+        int guarantorMemberId, string guarantorName, string? guarantorMobile);
 }

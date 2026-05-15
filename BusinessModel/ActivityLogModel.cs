@@ -57,6 +57,13 @@ public static class ActivityAction
     // Survey
     public const string SurveySubmitted = "SURVEY_SUBMITTED";
     public const string SurveyUpdated = "SURVEY_UPDATED";
+
+    // Qardan Hasana
+    public const string QardanHasanaSubmitted = "QARDAN_HASANA_SUBMITTED";
+    public const string QardanHasanaEdited = "QARDAN_HASANA_EDITED";
+    public const string QardanHasanaCaptainEdited = "QARDAN_HASANA_CAPTAIN_EDITED";
+    public const string QardanHasanaAdminEdited = "QARDAN_HASANA_ADMIN_EDITED";
+    public const string QardanHasanaCaptainApproved = "QARDAN_HASANA_CAPTAIN_APPROVED";
 }
 
 /// <summary>
@@ -68,4 +75,5 @@ public static class ActivityEntityType
     public const string MiqaatMember = "MiqaatMember";
     public const string Member = "Member";
     public const string Survey = "Survey";
+    public const string QardanHasana = "QardanHasana";
 }

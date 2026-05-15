@@ -2,6 +2,8 @@ using BurhaniGuards.Api.Contracts.Requests;
 using BurhaniGuards.Api.Contracts.Responses;
 using BurhaniGuards.Api.Repositories;
 using BurhaniGuards.Api.ViewModel;
+using BurhaniGuards.Api.BusinessModel;
+using System.Text.Json;
 
 namespace BurhaniGuards.Api.Services;
 
@@ -10,17 +12,20 @@ public class QardanHasanaService : IQardanHasanaService
     private readonly IQardanHasanaRepository _repository;
     private readonly IDapperMemberRepository _memberRepository;
     private readonly IEmailService _emailService;
+    private readonly IActivityLogService _activityLogService;
     private readonly ILogger<QardanHasanaService> _logger;
 
     public QardanHasanaService(
         IQardanHasanaRepository repository,
         IDapperMemberRepository memberRepository,
         IEmailService emailService,
+        IActivityLogService activityLogService,
         ILogger<QardanHasanaService> logger)
     {
         _repository = repository;
         _memberRepository = memberRepository;
         _emailService = emailService;
+        _activityLogService = activityLogService;
         _logger = logger;
     }
 
@@ -101,13 +106,45 @@ public class QardanHasanaService : IQardanHasanaService
         _logger.LogInformation("Qardan Hasana application {ApplicationNo} created by {ApplicantName} (ID: {MemberId})",
             applicationNo, request.ApplicantName, currentUser.id);
 
+        // Activity Log
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _activityLogService.LogAsync(new ActivityLogModel
+                {
+                    EntityType = ActivityEntityType.QardanHasana,
+                    EntityId = id,
+                    Action = ActivityAction.QardanHasanaSubmitted,
+                    PerformedBy = request.ApplicantName,
+                    PerformedById = currentUser.id,
+                    PerformedByRole = currentUser.roles == 2 ? "Captain" : "Member",
+                    TargetMemberId = currentUser.id,
+                    TargetMemberName = $"{request.ApplicantName} (ITS: {currentUser.itsId})",
+                    NewValue = $"₹{request.AmountRequested:N0}",
+                    Details = JsonSerializer.Serialize(new { applicationNo, applicantName = request.ApplicantName, amountRequested = request.AmountRequested, reason = request.Reason, guarantor = guarantorMember.FullName, captain = captain.FullName }),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to log Qardan Hasana submission activity for {ApplicationNo}: {Error}",
+                    applicationNo, ex.Message);
+            }
+        });
+
+        // Get captain's email for notification
+        var captainMemberInfo = await _repository.GetMemberById(captain.Id);
+        var captainEmail = captainMemberInfo?.Email;
+
         // Send emails asynchronously (fire-and-forget, don't block the response)
         _ = Task.Run(async () =>
         {
             try
             {
                 await SendApplicationEmails(applicationNo, request.ApplicantName, request.AmountRequested,
-                    request.Reason, currentUser.email, captain.FullName, guarantorMember.FullName, guarantorMember.Email);
+                    request.Reason, currentUser.email, captain.FullName, captainEmail,
+                    guarantorMember.FullName, guarantorMember.Email);
             }
             catch (Exception ex)
             {
@@ -216,7 +253,8 @@ public class QardanHasanaService : IQardanHasanaService
     private async Task SendApplicationEmails(
         string applicationNo, string applicantName, decimal amount,
         string? reason, string applicantEmail,
-        string captainName, string guarantorName, string guarantorEmail)
+        string captainName, string? captainEmail,
+        string guarantorName, string guarantorEmail)
     {
         var subject = $"Qardan Hasana Application - {applicationNo}";
 
@@ -233,9 +271,22 @@ public class QardanHasanaService : IQardanHasanaService
 
         await _emailService.SendEmailAsync(applicantEmail, subject, applicantBody);
 
-        // Email to Captain - use the captain's email if available
-        // Captain's email is not directly available from JamaatMemberResponse, 
-        // so the email will be sent in a future iteration if needed
+        // Email to Captain
+        if (!string.IsNullOrWhiteSpace(captainEmail))
+        {
+            var captainBody = BuildEmailHtml(
+                $"Dear {captainName},",
+                $@"A new Qardan Hasana application has been submitted that requires your approval.
+                <br/><br/>
+                <strong>Application No:</strong> {applicationNo}<br/>
+                <strong>Applicant:</strong> {applicantName}<br/>
+                <strong>Amount:</strong> ₹{amount:N2}<br/>
+                <strong>Reason:</strong> {reason ?? "N/A"}<br/><br/>
+                Please review and approve this application in the BGP app. 
+                The applicant will also approach you for your physical signature on the form.");
+
+            await _emailService.SendEmailAsync(captainEmail, subject, captainBody);
+        }
 
         // Email to Guarantor Member
         var guarantorBody = BuildEmailHtml(
@@ -384,6 +435,267 @@ public class QardanHasanaService : IQardanHasanaService
 
     #endregion
 
+    public async Task<QardanHasanaResponse> UpdateApplication(int id, UpdateQardanHasanaRequest request, CurrentUserViewModel currentUser)
+    {
+        // Get existing application
+        var application = await _repository.GetById(id);
+        if (application == null)
+            throw new Exception("Application not found.");
+
+        // Determine who is editing
+        var isApplicant = application.ApplicantMemberId == currentUser.id;
+        var isCaptain = application.CaptainMemberId == currentUser.id && currentUser.roles == 2;
+        var isAdmin = currentUser.roles == 7; // Resource Admin
+
+        // Only the applicant, assigned captain, or admin can edit
+        if (!isApplicant && !isCaptain && !isAdmin)
+            throw new Exception("Only the applicant, assigned Captain, or Admin can edit this application.");
+
+        // Applicant and Captain cannot edit if captain has already approved
+        // Admin CAN edit even after captain approval
+        if (!isAdmin && application.CaptainApproved)
+            throw new Exception("This application has already been approved by the Captain and cannot be edited.");
+
+        // Cannot edit if status is not pending (admin can still edit pending applications)
+        if (application.Status != "pending")
+            throw new Exception("This application can no longer be edited.");
+
+        // Validate
+        if (string.IsNullOrWhiteSpace(request.ApplicantName))
+            throw new Exception("Name (As Per Bank) is required.");
+
+        if (string.IsNullOrWhiteSpace(request.ApplicantMobile))
+            throw new Exception("Mobile No is required.");
+
+        if (request.AmountRequested <= 0 || request.AmountRequested > 20000)
+            throw new Exception("Amount must be between ₹1 and ₹20,000.");
+
+        if (request.GuarantorMemberId <= 0)
+            throw new Exception("Guarantor member is required.");
+
+        // Get guarantor member details
+        var guarantorMember = await _repository.GetMemberById(request.GuarantorMemberId);
+        if (guarantorMember == null)
+            throw new Exception("Selected guarantor member not found.");
+
+        // Build change details for audit log
+        var changes = new List<string>();
+        if (application.ApplicantName != request.ApplicantName)
+            changes.Add($"Name: {application.ApplicantName} → {request.ApplicantName}");
+        if ((application.ApplicantOccupation ?? "") != (request.ApplicantOccupation ?? ""))
+            changes.Add($"Occupation: {application.ApplicantOccupation ?? "—"} → {request.ApplicantOccupation ?? "—"}");
+        if (application.ApplicantMobile != request.ApplicantMobile)
+            changes.Add($"Mobile: {application.ApplicantMobile} → {request.ApplicantMobile}");
+        if ((application.Reason ?? "") != (request.Reason ?? ""))
+            changes.Add($"Reason: {application.Reason ?? "—"} → {request.Reason ?? "—"}");
+        if (application.AmountRequested != request.AmountRequested)
+            changes.Add($"Amount: ₹{application.AmountRequested:N0} → ₹{request.AmountRequested:N0}");
+        if (application.GuarantorMemberId != request.GuarantorMemberId)
+            changes.Add($"Guarantor: {application.GuarantorName} → {guarantorMember.FullName}");
+
+        // Update the application
+        await _repository.UpdateApplication(id,
+            request.ApplicantName,
+            request.ApplicantOccupation,
+            request.ApplicantMobile,
+            request.Reason,
+            request.AmountRequested,
+            request.GuarantorMemberId,
+            guarantorMember.FullName,
+            guarantorMember.Contact);
+
+        // Determine editor info
+        string editorName;
+        string editorRole;
+        if (isAdmin)
+        {
+            // Get admin's name from their member record
+            var adminMember = await _repository.GetMemberById(currentUser.id);
+            editorName = adminMember?.FullName ?? "Admin";
+            editorRole = "Admin";
+        }
+        else if (isCaptain)
+        {
+            editorName = application.CaptainName;
+            editorRole = "Captain";
+        }
+        else
+        {
+            editorName = request.ApplicantName;
+            editorRole = "Member";
+        }
+
+        _logger.LogInformation("Qardan Hasana application {AppNo} edited by {Editor} ({Role}, ID: {MemberId}). Changes: {Changes}",
+            application.ApplicationNo, editorName, editorRole, currentUser.id, string.Join("; ", changes));
+
+        // Activity Log
+        var activityAction = isAdmin
+            ? ActivityAction.QardanHasanaAdminEdited
+            : (isCaptain ? ActivityAction.QardanHasanaCaptainEdited : ActivityAction.QardanHasanaEdited);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _activityLogService.LogAsync(new ActivityLogModel
+                {
+                    EntityType = ActivityEntityType.QardanHasana,
+                    EntityId = id,
+                    Action = activityAction,
+                    PerformedBy = editorName,
+                    PerformedById = currentUser.id,
+                    PerformedByRole = editorRole,
+                    TargetMemberId = application.ApplicantMemberId,
+                    TargetMemberName = $"{application.ApplicantName} (ITS: {application.ApplicantItsId})",
+                    OldValue = $"₹{application.AmountRequested:N0}",
+                    NewValue = $"₹{request.AmountRequested:N0}",
+                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, editedBy = editorRole, changes }),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to log Qardan Hasana edit activity for {AppNo}: {Error}",
+                    application.ApplicationNo, ex.Message);
+            }
+        });
+
+        // Send emails based on who edited (fire-and-forget)
+        if (changes.Count > 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var changesHtml = string.Join("<br/>", changes.Select(c => $"• {c}"));
+                    var subject = $"Qardan Hasana Application Edited - {application.ApplicationNo}";
+
+                    if (isAdmin)
+                    {
+                        // === Admin edited: notify Applicant and Captain ===
+
+                        // 1. Email to Applicant
+                        var applicantMemberInfo = await _repository.GetMemberById(application.ApplicantMemberId);
+                        if (applicantMemberInfo != null && !string.IsNullOrWhiteSpace(applicantMemberInfo.Email))
+                        {
+                            var applicantBody = BuildEmailHtml(
+                                $"Dear {application.ApplicantName},",
+                                $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by the Admin ({editorName}).
+                                <br/><br/>
+                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
+                                <strong>Changes Made:</strong><br/>
+                                {changesHtml}<br/><br/>
+                                Please review the updated application in the BGP app.");
+
+                            await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
+                        }
+
+                        // 2. Email to Captain
+                        var captainMemberInfo = await _repository.GetMemberById(application.CaptainMemberId);
+                        if (captainMemberInfo != null && !string.IsNullOrWhiteSpace(captainMemberInfo.Email))
+                        {
+                            var captainBody = BuildEmailHtml(
+                                $"Dear {application.CaptainName},",
+                                $@"The Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by the Admin ({editorName}).
+                                <br/><br/>
+                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
+                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
+                                <strong>Changes Made:</strong><br/>
+                                {changesHtml}");
+
+                            await _emailService.SendEmailAsync(captainMemberInfo.Email, subject, captainBody);
+                        }
+                    }
+                    else if (isCaptain)
+                    {
+                        // === Captain edited: notify Applicant, Captain (confirmation), and Resource Admins ===
+
+                        // 1. Email to Applicant
+                        var applicantMemberInfo = await _repository.GetMemberById(application.ApplicantMemberId);
+                        if (applicantMemberInfo != null && !string.IsNullOrWhiteSpace(applicantMemberInfo.Email))
+                        {
+                            var applicantBody = BuildEmailHtml(
+                                $"Dear {application.ApplicantName},",
+                                $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by your Captain ({application.CaptainName}).
+                                <br/><br/>
+                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
+                                <strong>Changes Made:</strong><br/>
+                                {changesHtml}<br/><br/>
+                                Please review the updated application in the BGP app.");
+
+                            await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
+                        }
+
+                        // 2. Confirmation email to Captain
+                        var captainMemberInfo = await _repository.GetMemberById(application.CaptainMemberId);
+                        if (captainMemberInfo != null && !string.IsNullOrWhiteSpace(captainMemberInfo.Email))
+                        {
+                            var captainBody = BuildEmailHtml(
+                                $"Dear {application.CaptainName},",
+                                $@"You have edited the Qardan Hasana application <strong>{application.ApplicationNo}</strong>.
+                                <br/><br/>
+                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
+                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
+                                <strong>Changes Made:</strong><br/>
+                                {changesHtml}<br/><br/>
+                                This is a confirmation of your changes.");
+
+                            await _emailService.SendEmailAsync(captainMemberInfo.Email, subject, captainBody);
+                        }
+
+                        // 3. Email to all Resource Admins
+                        var admins = await _repository.GetResourceAdmins();
+                        foreach (var admin in admins)
+                        {
+                            if (string.IsNullOrWhiteSpace(admin.Email)) continue;
+
+                            var adminBody = BuildEmailHtml(
+                                $"Dear {admin.FullName},",
+                                $@"A Qardan Hasana application has been edited by Captain <strong>{application.CaptainName}</strong>.
+                                <br/><br/>
+                                <strong>Application No:</strong> {application.ApplicationNo}<br/>
+                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
+                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
+                                <strong>Changes Made:</strong><br/>
+                                {changesHtml}<br/><br/>
+                                Please review this in the BGP Admin Portal if needed.");
+
+                            await _emailService.SendEmailAsync(admin.Email, subject, adminBody);
+                        }
+                    }
+                    else
+                    {
+                        // === Applicant edited: notify Captain only ===
+                        var captainMemberInfo = await _repository.GetMemberById(application.CaptainMemberId);
+                        if (captainMemberInfo != null && !string.IsNullOrWhiteSpace(captainMemberInfo.Email))
+                        {
+                            var captainBody = BuildEmailHtml(
+                                $"Dear {application.CaptainName},",
+                                $@"The Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by the applicant.
+                                <br/><br/>
+                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
+                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
+                                <strong>Changes Made:</strong><br/>
+                                {changesHtml}<br/><br/>
+                                Please review the updated application in the BGP app before approving.");
+
+                            await _emailService.SendEmailAsync(captainMemberInfo.Email, subject, captainBody);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Failed to send Qardan Hasana edit emails for {AppNo}: {Error}",
+                        application.ApplicationNo, ex.Message);
+                }
+            });
+        }
+
+        // Return updated application
+        var result = await _repository.GetById(id);
+        return result!;
+    }
+
     public async Task CaptainApprove(int applicationId, int captainMemberId)
     {
         // Get application
@@ -404,6 +716,33 @@ public class QardanHasanaService : IQardanHasanaService
 
         _logger.LogInformation("Qardan Hasana application {Id} ({AppNo}) captain-approved by member {CaptainId}",
             applicationId, application.ApplicationNo, captainMemberId);
+
+        // Activity Log for captain approval
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _activityLogService.LogAsync(new ActivityLogModel
+                {
+                    EntityType = ActivityEntityType.QardanHasana,
+                    EntityId = applicationId,
+                    Action = ActivityAction.QardanHasanaCaptainApproved,
+                    PerformedBy = application.CaptainName,
+                    PerformedById = captainMemberId,
+                    PerformedByRole = "Captain",
+                    TargetMemberId = application.ApplicantMemberId,
+                    TargetMemberName = $"{application.ApplicantName} (ITS: {application.ApplicantItsId})",
+                    NewValue = "Approved",
+                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, applicantName = application.ApplicantName, amountRequested = application.AmountRequested }),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to log Qardan Hasana captain approval activity for {AppNo}: {Error}",
+                    application.ApplicationNo, ex.Message);
+            }
+        });
 
         // Send email to all Resource Admins (fire-and-forget)
         _ = Task.Run(async () =>
