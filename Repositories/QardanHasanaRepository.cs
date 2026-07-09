@@ -88,42 +88,53 @@ public class QardanHasanaRepository : IQardanHasanaRepository
     {
         var sql = @"
             SELECT 
-                id AS Id,
-                application_no AS ApplicationNo,
-                applicant_member_id AS ApplicantMemberId,
-                applicant_its_id AS ApplicantItsId,
-                applicant_name AS ApplicantName,
-                applicant_jamaat AS ApplicantJamaat,
-                applicant_occupation AS ApplicantOccupation,
-                applicant_mobile AS ApplicantMobile,
-                reason AS Reason,
-                amount_requested AS AmountRequested,
-                applicant_signature_url AS ApplicantSignatureUrl,
-                applicant_photo_url AS ApplicantPhotoUrl,
-                captain_member_id AS CaptainMemberId,
-                captain_name AS CaptainName,
-                captain_mobile AS CaptainMobile,
-                captain_approved AS CaptainApproved,
-                captain_approved_at AS CaptainApprovedAt,
-                guarantor_member_id AS GuarantorMemberId,
-                guarantor_name AS GuarantorName,
-                guarantor_mobile AS GuarantorMobile,
-                status AS Status,
-                form_image_url AS FormImageUrl,
-                sanctioned_amount AS SanctionedAmount,
-                installment_amount AS InstallmentAmount,
-                number_of_months AS NumberOfMonths,
-                installment_date_from AS InstallmentDateFrom,
-                installment_date_to AS InstallmentDateTo,
-                admin_signature_url AS AdminSignatureUrl,
-                admin_form_image_url AS AdminFormImageUrl,
-                admin_approved_by AS AdminApprovedBy,
-                admin_approved_at AS AdminApprovedAt,
-                rejection_reason AS RejectionReason,
-                created_at AS CreatedAt,
-                updated_at AS UpdatedAt
-            FROM qardan_hasana
-            WHERE id = @Id
+                q.id AS Id,
+                q.application_no AS ApplicationNo,
+                q.applicant_member_id AS ApplicantMemberId,
+                q.applicant_its_id AS ApplicantItsId,
+                q.applicant_name AS ApplicantName,
+                am.full_name AS ApplicantMemberName,
+                q.applicant_jamaat AS ApplicantJamaat,
+                q.applicant_occupation AS ApplicantOccupation,
+                q.applicant_mobile AS ApplicantMobile,
+                q.reason AS Reason,
+                q.amount_requested AS AmountRequested,
+                q.applicant_signature_url AS ApplicantSignatureUrl,
+                q.applicant_photo_url AS ApplicantPhotoUrl,
+                am.profile AS ApplicantProfile,
+                q.captain_member_id AS CaptainMemberId,
+                q.captain_name AS CaptainName,
+                q.captain_mobile AS CaptainMobile,
+                g1.its_id AS CaptainItsId,
+                g1.profile AS CaptainProfile,
+                q.captain_approved AS CaptainApproved,
+                q.captain_approved_at AS CaptainApprovedAt,
+                q.guarantor_member_id AS GuarantorMemberId,
+                q.guarantor_name AS GuarantorName,
+                q.guarantor_mobile AS GuarantorMobile,
+                g2.its_id AS GuarantorItsId,
+                g2.profile AS GuarantorProfile,
+                COALESCE(q.guarantor_approved, 0) AS GuarantorApproved,
+                q.guarantor_approved_at AS GuarantorApprovedAt,
+                q.status AS Status,
+                q.form_image_url AS FormImageUrl,
+                q.sanctioned_amount AS SanctionedAmount,
+                q.installment_amount AS InstallmentAmount,
+                q.number_of_months AS NumberOfMonths,
+                q.installment_date_from AS InstallmentDateFrom,
+                q.installment_date_to AS InstallmentDateTo,
+                q.admin_signature_url AS AdminSignatureUrl,
+                q.admin_form_image_url AS AdminFormImageUrl,
+                q.admin_approved_by AS AdminApprovedBy,
+                q.admin_approved_at AS AdminApprovedAt,
+                q.rejection_reason AS RejectionReason,
+                q.created_at AS CreatedAt,
+                q.updated_at AS UpdatedAt
+            FROM qardan_hasana q
+            LEFT JOIN members am ON am.id = q.applicant_member_id
+            LEFT JOIN members g1 ON g1.id = q.captain_member_id
+            LEFT JOIN members g2 ON g2.id = q.guarantor_member_id
+            WHERE q.id = @Id
         ";
 
         using var connection = _context.CreateConnection();
@@ -143,7 +154,9 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 sanctioned_amount AS SanctionedAmount,
                 status AS Status,
                 captain_approved AS CaptainApproved,
+                COALESCE(guarantor_approved, 0) AS GuarantorApproved,
                 captain_member_id AS CaptainMemberId,
+                guarantor_member_id AS GuarantorMemberId,
                 created_at AS CreatedAt
             FROM qardan_hasana
         ";
@@ -173,7 +186,9 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 sanctioned_amount AS SanctionedAmount,
                 status AS Status,
                 captain_approved AS CaptainApproved,
+                COALESCE(guarantor_approved, 0) AS GuarantorApproved,
                 captain_member_id AS CaptainMemberId,
+                guarantor_member_id AS GuarantorMemberId,
                 created_at AS CreatedAt
             FROM qardan_hasana
             WHERE applicant_member_id = @MemberId
@@ -198,7 +213,9 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 sanctioned_amount AS SanctionedAmount,
                 status AS Status,
                 captain_approved AS CaptainApproved,
+                COALESCE(guarantor_approved, 0) AS GuarantorApproved,
                 captain_member_id AS CaptainMemberId,
+                guarantor_member_id AS GuarantorMemberId,
                 created_at AS CreatedAt
             FROM qardan_hasana
             WHERE applicant_jamaat = @Jamaat
@@ -207,6 +224,33 @@ public class QardanHasanaRepository : IQardanHasanaRepository
 
         using var connection = _context.CreateConnection();
         var result = await connection.QueryAsync<QardanHasanaListResponse>(sql, new { Jamaat = jamaat });
+        return result.ToList();
+    }
+
+    public async Task<List<QardanHasanaListResponse>> GetByGuarantorId(int memberId)
+    {
+        var sql = @"
+            SELECT 
+                id AS Id,
+                application_no AS ApplicationNo,
+                applicant_member_id AS ApplicantMemberId,
+                applicant_name AS ApplicantName,
+                applicant_jamaat AS ApplicantJamaat,
+                amount_requested AS AmountRequested,
+                sanctioned_amount AS SanctionedAmount,
+                status AS Status,
+                captain_approved AS CaptainApproved,
+                COALESCE(guarantor_approved, 0) AS GuarantorApproved,
+                captain_member_id AS CaptainMemberId,
+                guarantor_member_id AS GuarantorMemberId,
+                created_at AS CreatedAt
+            FROM qardan_hasana
+            WHERE captain_member_id = @MemberId OR guarantor_member_id = @MemberId
+            ORDER BY created_at DESC
+        ";
+
+        using var connection = _context.CreateConnection();
+        var result = await connection.QueryAsync<QardanHasanaListResponse>(sql, new { MemberId = memberId });
         return result.ToList();
     }
 
@@ -359,6 +403,20 @@ public class QardanHasanaRepository : IQardanHasanaRepository
         await connection.ExecuteAsync(sql, new { Id = id, Now = GetIstNow() });
     }
 
+    public async Task GuarantorApprove(int id)
+    {
+        var sql = @"
+            UPDATE qardan_hasana SET
+                guarantor_approved = 1,
+                guarantor_approved_at = @Now,
+                updated_at = @Now
+            WHERE id = @Id
+        ";
+
+        using var connection = _context.CreateConnection();
+        await connection.ExecuteAsync(sql, new { Id = id, Now = GetIstNow() });
+    }
+
     public async Task<List<MemberBasicInfo>> GetResourceAdmins()
     {
         var sql = @"
@@ -399,6 +457,7 @@ public class QardanHasanaRepository : IQardanHasanaRepository
 
     public async Task UpdateApplication(int id, string applicantName, string? applicantOccupation,
         string applicantMobile, string? reason, decimal amountRequested,
+        int captainMemberId, string captainName, string? captainMobile,
         int guarantorMemberId, string guarantorName, string? guarantorMobile)
     {
         var sql = @"
@@ -408,9 +467,16 @@ public class QardanHasanaRepository : IQardanHasanaRepository
                 applicant_mobile = @ApplicantMobile,
                 reason = @Reason,
                 amount_requested = @AmountRequested,
+                captain_member_id = @CaptainMemberId,
+                captain_name = @CaptainName,
+                captain_mobile = @CaptainMobile,
+                captain_approved = 0,
+                captain_approved_at = NULL,
                 guarantor_member_id = @GuarantorMemberId,
                 guarantor_name = @GuarantorName,
                 guarantor_mobile = @GuarantorMobile,
+                guarantor_approved = 0,
+                guarantor_approved_at = NULL,
                 updated_at = @Now
             WHERE id = @Id
         ";
@@ -424,6 +490,9 @@ public class QardanHasanaRepository : IQardanHasanaRepository
             ApplicantMobile = applicantMobile,
             Reason = reason,
             AmountRequested = amountRequested,
+            CaptainMemberId = captainMemberId,
+            CaptainName = captainName,
+            CaptainMobile = captainMobile,
             GuarantorMemberId = guarantorMemberId,
             GuarantorName = guarantorName,
             GuarantorMobile = guarantorMobile,

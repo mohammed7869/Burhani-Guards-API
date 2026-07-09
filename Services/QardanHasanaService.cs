@@ -44,35 +44,38 @@ public class QardanHasanaService : IQardanHasanaService
         if (string.IsNullOrWhiteSpace(request.ApplicantMobile))
             throw new Exception("Mobile No is required.");
 
+        if (request.Guarantor1MemberId <= 0)
+            throw new Exception("Guarantor 1 is required.");
+
         if (request.GuarantorMemberId <= 0)
-            throw new Exception("Guarantor member is required.");
+            throw new Exception("Guarantor 2 is required.");
+
+        if (request.Guarantor1MemberId == request.GuarantorMemberId)
+            throw new Exception("Guarantor 1 and Guarantor 2 cannot be the same person.");
 
         // Check for existing active application
         var hasActive = await _repository.HasActiveApplication(currentUser.id);
         if (hasActive)
             throw new Exception("You already have an active Qardan Hasana application. You cannot apply again until your current application is completed or rejected.");
 
-        // Get Captain of the applicant's jamaat
-        var captain = await _repository.GetCaptainByJamaat(currentUser.jamaat ?? "");
-        if (captain == null)
-            throw new Exception("No Captain found for your Mohallah. Please contact admin.");
+        // Get Guarantor 1 member details
+        var guarantor1Member = await _repository.GetMemberById(request.Guarantor1MemberId);
+        if (guarantor1Member == null)
+            throw new Exception("Selected Guarantor 1 member not found.");
 
-        // Get guarantor member details (using explicit column aliasing for proper mapping)
-        var guarantorMember = await _repository.GetMemberById(request.GuarantorMemberId);
-        if (guarantorMember == null)
-            throw new Exception("Selected guarantor member not found.");
+        // Get Guarantor 2 member details
+        var guarantor2Member = await _repository.GetMemberById(request.GuarantorMemberId);
+        if (guarantor2Member == null)
+            throw new Exception("Selected Guarantor 2 member not found.");
 
         // Get applicant member details for JamaatId
         var applicantMember = await _repository.GetMemberById(currentUser.id);
-
-        // Check if the applicant IS the captain (captain applying for themselves)
-        var isCaptainApplying = currentUser.id == captain.Id;
 
         // Generate application number: QH-YYYYMMDD-XXXX (using IST)
         var count = await _repository.GetNextApplicationCount();
         var applicationNo = $"QH-{GetIstNow():yyyyMMdd}-{count:D4}";
 
-        // Create application
+        // Create application (Guarantor 1 stored in captain_* columns)
         var id = await _repository.Create(
             applicationNo: applicationNo,
             applicantMemberId: currentUser.id,
@@ -87,21 +90,13 @@ public class QardanHasanaService : IQardanHasanaService
             applicantSignatureUrl: null,
             applicantPhotoUrl: null,
             termsAccepted: request.TermsAccepted,
-            captainMemberId: captain.Id,
-            captainName: captain.FullName,
-            captainMobile: captain.Contact,
+            captainMemberId: guarantor1Member.Id,
+            captainName: guarantor1Member.FullName,
+            captainMobile: guarantor1Member.Contact,
             guarantorMemberId: request.GuarantorMemberId,
-            guarantorName: guarantorMember.FullName,
-            guarantorMobile: guarantorMember.Contact
+            guarantorName: guarantor2Member.FullName,
+            guarantorMobile: guarantor2Member.Contact
         );
-
-        // If captain is applying, auto-approve captain_approved
-        if (isCaptainApplying)
-        {
-            await _repository.CaptainApprove(id);
-            _logger.LogInformation("Captain {CaptainName} applied for Qardan Hasana - auto-approved as captain. Application {AppNo}",
-                captain.FullName, applicationNo);
-        }
 
         _logger.LogInformation("Qardan Hasana application {ApplicationNo} created by {ApplicantName} (ID: {MemberId})",
             applicationNo, request.ApplicantName, currentUser.id);
@@ -122,7 +117,7 @@ public class QardanHasanaService : IQardanHasanaService
                     TargetMemberId = currentUser.id,
                     TargetMemberName = $"{request.ApplicantName} (ITS: {currentUser.itsId})",
                     NewValue = $"₹{request.AmountRequested:N0}",
-                    Details = JsonSerializer.Serialize(new { applicationNo, applicantName = request.ApplicantName, amountRequested = request.AmountRequested, reason = request.Reason, guarantor = guarantorMember.FullName, captain = captain.FullName }),
+                    Details = JsonSerializer.Serialize(new { applicationNo, applicantName = request.ApplicantName, amountRequested = request.AmountRequested, reason = request.Reason, guarantor1 = guarantor1Member.FullName, guarantor2 = guarantor2Member.FullName }),
                     CreatedAt = DateTime.UtcNow
                 });
             }
@@ -133,18 +128,15 @@ public class QardanHasanaService : IQardanHasanaService
             }
         });
 
-        // Get captain's email for notification
-        var captainMemberInfo = await _repository.GetMemberById(captain.Id);
-        var captainEmail = captainMemberInfo?.Email;
-
-        // Send emails asynchronously (fire-and-forget, don't block the response)
+        // Send emails to both guarantors (fire-and-forget)
         _ = Task.Run(async () =>
         {
             try
             {
                 await SendApplicationEmails(applicationNo, request.ApplicantName, request.AmountRequested,
-                    request.Reason, currentUser.email, captain.FullName, captainEmail,
-                    guarantorMember.FullName, guarantorMember.Email);
+                    request.Reason, currentUser.email,
+                    guarantor1Member.FullName, guarantor1Member.Email,
+                    guarantor2Member.FullName, guarantor2Member.Email);
             }
             catch (Exception ex)
             {
@@ -178,6 +170,11 @@ public class QardanHasanaService : IQardanHasanaService
         return await _repository.GetByJamaat(jamaat);
     }
 
+    public async Task<List<QardanHasanaListResponse>> GetGuarantorApplications(int memberId)
+    {
+        return await _repository.GetByGuarantorId(memberId);
+    }
+
     public async Task Sanction(int id, SanctionQardanHasanaRequest request,
         string? adminSignatureUrl, string? adminFormImageUrl, int adminId)
     {
@@ -191,8 +188,12 @@ public class QardanHasanaService : IQardanHasanaService
         if (application.Status == "rejected")
             throw new Exception("Cannot sanction a rejected application.");
 
-        if (string.IsNullOrWhiteSpace(adminFormImageUrl))
-            throw new Exception("Form image is required for sanctioning.");
+        // Both guarantors must have approved before admin can sanction
+        if (!application.CaptainApproved)
+            throw new Exception("Guarantor 1 has not approved this application yet.");
+
+        if (!application.GuarantorApproved)
+            throw new Exception("Guarantor 2 has not approved this application yet.");
 
         if (request.SanctionedAmount <= 0 || request.SanctionedAmount > 20000)
             throw new Exception("Sanctioned amount must be between ₹1 and ₹20,000.");
@@ -209,6 +210,36 @@ public class QardanHasanaService : IQardanHasanaService
 
         _logger.LogInformation("Qardan Hasana {ApplicationNo} sanctioned by Admin {AdminId}. Amount: {Amount}",
             application.ApplicationNo, adminId, request.SanctionedAmount);
+
+        // Activity Log for sanctioning
+        var adminMember = await _repository.GetMemberById(adminId);
+        var adminName = adminMember?.FullName ?? "Admin";
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _activityLogService.LogAsync(new ActivityLogModel
+                {
+                    EntityType = ActivityEntityType.QardanHasana,
+                    EntityId = id,
+                    Action = ActivityAction.QardanHasanaSanctioned,
+                    PerformedBy = adminName,
+                    PerformedById = adminId,
+                    PerformedByRole = "Resource Admin",
+                    TargetMemberId = application.ApplicantMemberId,
+                    TargetMemberName = $"{application.ApplicantName} (ITS: {application.ApplicantItsId})",
+                    NewValue = $"₹{request.SanctionedAmount:N0}",
+                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, applicantName = application.ApplicantName, amountRequested = application.AmountRequested, sanctionedAmount = request.SanctionedAmount, installmentAmount = request.InstallmentAmount, numberOfMonths = request.NumberOfMonths }),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to log Qardan Hasana sanction activity for {AppNo}: {Error}",
+                    application.ApplicationNo, ex.Message);
+            }
+        });
     }
 
     public async Task Reject(int id, RejectQardanHasanaRequest request, int adminId)
@@ -227,6 +258,36 @@ public class QardanHasanaService : IQardanHasanaService
 
         _logger.LogInformation("Qardan Hasana {ApplicationNo} rejected by Admin {AdminId}. Reason: {Reason}",
             application.ApplicationNo, adminId, request.Reason);
+
+        // Activity Log for admin rejection
+        var adminMemberInfo = await _repository.GetMemberById(adminId);
+        var rejectAdminName = adminMemberInfo?.FullName ?? "Admin";
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _activityLogService.LogAsync(new ActivityLogModel
+                {
+                    EntityType = ActivityEntityType.QardanHasana,
+                    EntityId = id,
+                    Action = ActivityAction.QardanHasanaRejected,
+                    PerformedBy = rejectAdminName,
+                    PerformedById = adminId,
+                    PerformedByRole = "Resource Admin",
+                    TargetMemberId = application.ApplicantMemberId,
+                    TargetMemberName = $"{application.ApplicantName} (ITS: {application.ApplicantItsId})",
+                    NewValue = "Rejected",
+                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, applicantName = application.ApplicantName, amountRequested = application.AmountRequested, reason = request.Reason }),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to log Qardan Hasana rejection activity for {AppNo}: {Error}",
+                    application.ApplicationNo, ex.Message);
+            }
+        });
     }
 
     public async Task<List<JamaatMemberResponse>> GetMembersByJamaat(string jamaat, int excludeMemberId)
@@ -253,8 +314,8 @@ public class QardanHasanaService : IQardanHasanaService
     private async Task SendApplicationEmails(
         string applicationNo, string applicantName, decimal amount,
         string? reason, string applicantEmail,
-        string captainName, string? captainEmail,
-        string guarantorName, string guarantorEmail)
+        string guarantor1Name, string guarantor1Email,
+        string guarantor2Name, string guarantor2Email)
     {
         var subject = $"Qardan Hasana Application - {applicationNo}";
 
@@ -265,44 +326,43 @@ public class QardanHasanaService : IQardanHasanaService
             <br/><br/>
             <strong>Amount Requested:</strong> ₹{amount:N2}<br/>
             <strong>Reason:</strong> {reason ?? "N/A"}<br/><br/>
-            Please download the PDF form from the app and collect physical signatures from your Captain ({captainName}) 
-            and Guarantor Member ({guarantorName}).<br/><br/>
-            Once all signatures are collected, submit the physical form to the Resource Admin for processing.");
+            Both your Guarantors ({guarantor1Name} and {guarantor2Name}) will receive an email to review and approve your application from the BGP app.<br/><br/>
+            Once both guarantors approve, the application will be forwarded to the Resource Admin for sanctioning.");
 
         await _emailService.SendEmailAsync(applicantEmail, subject, applicantBody);
 
-        // Email to Captain
-        if (!string.IsNullOrWhiteSpace(captainEmail))
+        // Email to Guarantor 1
+        if (!string.IsNullOrWhiteSpace(guarantor1Email))
         {
-            var captainBody = BuildEmailHtml(
-                $"Dear {captainName},",
-                $@"A new Qardan Hasana application has been submitted that requires your approval.
+            var g1Body = BuildEmailHtml(
+                $"Dear {guarantor1Name},",
+                $@"You have been selected as <strong>Guarantor 1</strong> for a Qardan Hasana application.
                 <br/><br/>
                 <strong>Application No:</strong> {applicationNo}<br/>
                 <strong>Applicant:</strong> {applicantName}<br/>
                 <strong>Amount:</strong> ₹{amount:N2}<br/>
                 <strong>Reason:</strong> {reason ?? "N/A"}<br/><br/>
-                Please review and approve this application in the BGP app. 
-                The applicant will also approach you for your physical signature on the form.");
+                Please open the BGP app, review the application details, and approve or reject this request.
+                By approving, you accept joint responsibility for repayment in case of default as per BGP Qardan Hasana terms.");
 
-            await _emailService.SendEmailAsync(captainEmail, subject, captainBody);
+            await _emailService.SendEmailAsync(guarantor1Email, subject, g1Body);
         }
 
-        // Email to Guarantor Member
-        var guarantorBody = BuildEmailHtml(
-            $"Dear {guarantorName},",
-            $@"You have been selected as a Guarantor for a Qardan Hasana application.
-            <br/><br/>
-            <strong>Application No:</strong> {applicationNo}<br/>
-            <strong>Applicant:</strong> {applicantName}<br/>
-            <strong>Amount:</strong> ₹{amount:N2}<br/>
-            <strong>Reason:</strong> {reason ?? "N/A"}<br/><br/>
-            The applicant will approach you for your signature on the physical form. 
-            By signing, you accept joint responsibility for repayment in case of default as per BGP Qardan Hasana terms.");
-
-        if (!string.IsNullOrWhiteSpace(guarantorEmail))
+        // Email to Guarantor 2
+        if (!string.IsNullOrWhiteSpace(guarantor2Email))
         {
-            await _emailService.SendEmailAsync(guarantorEmail, subject, guarantorBody);
+            var g2Body = BuildEmailHtml(
+                $"Dear {guarantor2Name},",
+                $@"You have been selected as <strong>Guarantor 2</strong> for a Qardan Hasana application.
+                <br/><br/>
+                <strong>Application No:</strong> {applicationNo}<br/>
+                <strong>Applicant:</strong> {applicantName}<br/>
+                <strong>Amount:</strong> ₹{amount:N2}<br/>
+                <strong>Reason:</strong> {reason ?? "N/A"}<br/><br/>
+                Please open the BGP app, review the application details, and approve or reject this request.
+                By approving, you accept joint responsibility for repayment in case of default as per BGP Qardan Hasana terms.");
+
+            await _emailService.SendEmailAsync(guarantor2Email, subject, g2Body);
         }
     }
 
@@ -382,17 +442,17 @@ public class QardanHasanaService : IQardanHasanaService
             <div class='section'>GUARANTOR SECTION</div>
             <table>
                 <tr>
-                    <td colspan='2' style='background: #e8f5e9; font-weight: bold;'>1. Captain (Guarantor 1)</td>
+                    <td colspan='2' style='background: #e8f5e9; font-weight: bold;'>1. Guarantor 1</td>
                 </tr>
-                <tr><td class='label'>Captain Name</td><td>{app.CaptainName}</td></tr>
-                <tr><td class='label'>Mobile No (Captain)</td><td>{app.CaptainMobile ?? ""}</td></tr>
-                <tr><td class='label'>Signature (Captain)</td><td style='height: 60px;'></td></tr>
+                <tr><td class='label'>Name</td><td>{app.CaptainName}</td></tr>
+                <tr><td class='label'>Mobile No</td><td>{app.CaptainMobile ?? ""}</td></tr>
+                <tr><td class='label'>Signature</td><td style='height: 60px;'></td></tr>
                 <tr>
-                    <td colspan='2' style='background: #e8f5e9; font-weight: bold;'>2. Member (Guarantor 2)</td>
+                    <td colspan='2' style='background: #e8f5e9; font-weight: bold;'>2. Guarantor 2</td>
                 </tr>
-                <tr><td class='label'>Member Name</td><td>{app.GuarantorName}</td></tr>
-                <tr><td class='label'>Mobile No (Member)</td><td>{app.GuarantorMobile ?? ""}</td></tr>
-                <tr><td class='label'>Signature (Member)</td><td style='height: 60px;'></td></tr>
+                <tr><td class='label'>Name</td><td>{app.GuarantorName}</td></tr>
+                <tr><td class='label'>Mobile No</td><td>{app.GuarantorMobile ?? ""}</td></tr>
+                <tr><td class='label'>Signature</td><td style='height: 60px;'></td></tr>
             </table>
 
             <div class='section'>FOR OFFICE USE ONLY</div>
@@ -412,7 +472,7 @@ public class QardanHasanaService : IQardanHasanaService
                     <li><strong>Eligibility:</strong> Only registered BGP members are eligible. The applicant must belong to the same Mohallah under which the application is submitted. No pending dues or unresolved disciplinary matters.</li>
                     <li><strong>Qardan Amount:</strong> Maximum ₹20,000. Sanctioned amount may be less than requested.</li>
                     <li><strong>Purpose:</strong> Must be used for genuine and lawful purposes only. BGP reserves the right to seek clarification.</li>
-                    <li><strong>Guarantors:</strong> Two guarantors mandatory. Guarantor 1: Mohallah Captain. Guarantor 2: Active BGP member from same Mohallah. Must be financially responsible with no outstanding Qardan dues. Accept joint responsibility for repayment.</li>
+                    <li><strong>Guarantors:</strong> Two guarantors mandatory from the same Mohallah. Must be financially responsible with no outstanding Qardan dues. Accept joint responsibility for repayment.</li>
                     <li><strong>Repayment:</strong> Without delay as per agreed schedule. Lump sum or monthly installments. Early repayment encouraged. No extension without prior written approval.</li>
                     <li><strong>Default & Recovery:</strong> Verbal/written reminders. Guarantors informed. Guarantors liable for outstanding amount. No interest or penalty.</li>
                     <li><strong>Discipline:</strong> Repeated default may result in disqualification from BGP benefits. False information results in immediate cancellation.</li>
@@ -444,19 +504,19 @@ public class QardanHasanaService : IQardanHasanaService
 
         // Determine who is editing
         var isApplicant = application.ApplicantMemberId == currentUser.id;
-        var isCaptain = application.CaptainMemberId == currentUser.id && currentUser.roles == 2;
+        var isGuarantor1 = application.CaptainMemberId == currentUser.id;
+        var isGuarantor2 = application.GuarantorMemberId == currentUser.id;
         var isAdmin = currentUser.roles == 7; // Resource Admin
 
-        // Only the applicant, assigned captain, or admin can edit
-        if (!isApplicant && !isCaptain && !isAdmin)
-            throw new Exception("Only the applicant, assigned Captain, or Admin can edit this application.");
+        // Only the applicant, assigned guarantors, or admin can edit
+        if (!isApplicant && !isGuarantor1 && !isGuarantor2 && !isAdmin)
+            throw new Exception("Only the applicant, assigned Guarantors, or Admin can edit this application.");
 
-        // Applicant and Captain cannot edit if captain has already approved
-        // Admin CAN edit even after captain approval
-        if (!isAdmin && application.CaptainApproved)
-            throw new Exception("This application has already been approved by the Captain and cannot be edited.");
+        // Cannot edit if any guarantor has already approved (unless admin)
+        if (!isAdmin && (application.CaptainApproved || application.GuarantorApproved))
+            throw new Exception("This application has already been approved by a Guarantor and cannot be edited.");
 
-        // Cannot edit if status is not pending (admin can still edit pending applications)
+        // Cannot edit if status is not pending
         if (application.Status != "pending")
             throw new Exception("This application can no longer be edited.");
 
@@ -470,13 +530,23 @@ public class QardanHasanaService : IQardanHasanaService
         if (request.AmountRequested <= 0 || request.AmountRequested > 20000)
             throw new Exception("Amount must be between ₹1 and ₹20,000.");
 
+        if (request.Guarantor1MemberId <= 0)
+            throw new Exception("Guarantor 1 is required.");
+
         if (request.GuarantorMemberId <= 0)
-            throw new Exception("Guarantor member is required.");
+            throw new Exception("Guarantor 2 is required.");
+
+        if (request.Guarantor1MemberId == request.GuarantorMemberId)
+            throw new Exception("Guarantor 1 and Guarantor 2 cannot be the same person.");
 
         // Get guarantor member details
-        var guarantorMember = await _repository.GetMemberById(request.GuarantorMemberId);
-        if (guarantorMember == null)
-            throw new Exception("Selected guarantor member not found.");
+        var guarantor1Member = await _repository.GetMemberById(request.Guarantor1MemberId);
+        if (guarantor1Member == null)
+            throw new Exception("Selected Guarantor 1 member not found.");
+
+        var guarantor2Member = await _repository.GetMemberById(request.GuarantorMemberId);
+        if (guarantor2Member == null)
+            throw new Exception("Selected Guarantor 2 member not found.");
 
         // Build change details for audit log
         var changes = new List<string>();
@@ -490,34 +560,38 @@ public class QardanHasanaService : IQardanHasanaService
             changes.Add($"Reason: {application.Reason ?? "—"} → {request.Reason ?? "—"}");
         if (application.AmountRequested != request.AmountRequested)
             changes.Add($"Amount: ₹{application.AmountRequested:N0} → ₹{request.AmountRequested:N0}");
+        if (application.CaptainMemberId != request.Guarantor1MemberId)
+            changes.Add($"Guarantor 1: {application.CaptainName} → {guarantor1Member.FullName}");
         if (application.GuarantorMemberId != request.GuarantorMemberId)
-            changes.Add($"Guarantor: {application.GuarantorName} → {guarantorMember.FullName}");
+            changes.Add($"Guarantor 2: {application.GuarantorName} → {guarantor2Member.FullName}");
 
-        // Update the application
+        // Update the application (resets both guarantor approvals)
         await _repository.UpdateApplication(id,
             request.ApplicantName,
             request.ApplicantOccupation,
             request.ApplicantMobile,
             request.Reason,
             request.AmountRequested,
+            guarantor1Member.Id,
+            guarantor1Member.FullName,
+            guarantor1Member.Contact,
             request.GuarantorMemberId,
-            guarantorMember.FullName,
-            guarantorMember.Contact);
+            guarantor2Member.FullName,
+            guarantor2Member.Contact);
 
         // Determine editor info
         string editorName;
         string editorRole;
         if (isAdmin)
         {
-            // Get admin's name from their member record
             var adminMember = await _repository.GetMemberById(currentUser.id);
             editorName = adminMember?.FullName ?? "Admin";
             editorRole = "Admin";
         }
-        else if (isCaptain)
+        else if (isGuarantor1 || isGuarantor2)
         {
-            editorName = application.CaptainName;
-            editorRole = "Captain";
+            editorName = isGuarantor1 ? application.CaptainName : application.GuarantorName;
+            editorRole = "Guarantor";
         }
         else
         {
@@ -531,7 +605,7 @@ public class QardanHasanaService : IQardanHasanaService
         // Activity Log
         var activityAction = isAdmin
             ? ActivityAction.QardanHasanaAdminEdited
-            : (isCaptain ? ActivityAction.QardanHasanaCaptainEdited : ActivityAction.QardanHasanaEdited);
+            : (isGuarantor1 || isGuarantor2 ? ActivityAction.QardanHasanaCaptainEdited : ActivityAction.QardanHasanaEdited);
 
         _ = Task.Run(async () =>
         {
@@ -560,7 +634,7 @@ public class QardanHasanaService : IQardanHasanaService
             }
         });
 
-        // Send emails based on who edited (fire-and-forget)
+        // Send notification emails if there are changes (fire-and-forget)
         if (changes.Count > 0)
         {
             _ = Task.Run(async () =>
@@ -570,117 +644,48 @@ public class QardanHasanaService : IQardanHasanaService
                     var changesHtml = string.Join("<br/>", changes.Select(c => $"• {c}"));
                     var subject = $"Qardan Hasana Application Edited - {application.ApplicationNo}";
 
-                    if (isAdmin)
+                    // Notify applicant
+                    var applicantMemberInfo = await _repository.GetMemberById(application.ApplicantMemberId);
+                    if (applicantMemberInfo != null && !string.IsNullOrWhiteSpace(applicantMemberInfo.Email))
                     {
-                        // === Admin edited: notify Applicant and Captain ===
+                        var applicantBody = BuildEmailHtml(
+                            $"Dear {application.ApplicantName},",
+                            $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by {editorName} ({editorRole}).
+                            <br/><br/>
+                            <strong>Changes Made:</strong><br/>
+                            {changesHtml}<br/><br/>
+                            Both guarantors will need to re-approve this application.");
 
-                        // 1. Email to Applicant
-                        var applicantMemberInfo = await _repository.GetMemberById(application.ApplicantMemberId);
-                        if (applicantMemberInfo != null && !string.IsNullOrWhiteSpace(applicantMemberInfo.Email))
-                        {
-                            var applicantBody = BuildEmailHtml(
-                                $"Dear {application.ApplicantName},",
-                                $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by the Admin ({editorName}).
-                                <br/><br/>
-                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
-                                <strong>Changes Made:</strong><br/>
-                                {changesHtml}<br/><br/>
-                                Please review the updated application in the BGP app.");
-
-                            await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
-                        }
-
-                        // 2. Email to Captain
-                        var captainMemberInfo = await _repository.GetMemberById(application.CaptainMemberId);
-                        if (captainMemberInfo != null && !string.IsNullOrWhiteSpace(captainMemberInfo.Email))
-                        {
-                            var captainBody = BuildEmailHtml(
-                                $"Dear {application.CaptainName},",
-                                $@"The Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by the Admin ({editorName}).
-                                <br/><br/>
-                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
-                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
-                                <strong>Changes Made:</strong><br/>
-                                {changesHtml}");
-
-                            await _emailService.SendEmailAsync(captainMemberInfo.Email, subject, captainBody);
-                        }
+                        await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
                     }
-                    else if (isCaptain)
+
+                    // Notify both guarantors
+                    var g1Info = await _repository.GetMemberById(guarantor1Member.Id);
+                    if (g1Info != null && !string.IsNullOrWhiteSpace(g1Info.Email))
                     {
-                        // === Captain edited: notify Applicant, Captain (confirmation), and Resource Admins ===
+                        var g1Body = BuildEmailHtml(
+                            $"Dear {guarantor1Member.FullName},",
+                            $@"The Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited.
+                            <br/><br/>
+                            <strong>Changes Made:</strong><br/>
+                            {changesHtml}<br/><br/>
+                            Please review and re-approve this application in the BGP app.");
 
-                        // 1. Email to Applicant
-                        var applicantMemberInfo = await _repository.GetMemberById(application.ApplicantMemberId);
-                        if (applicantMemberInfo != null && !string.IsNullOrWhiteSpace(applicantMemberInfo.Email))
-                        {
-                            var applicantBody = BuildEmailHtml(
-                                $"Dear {application.ApplicantName},",
-                                $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by your Captain ({application.CaptainName}).
-                                <br/><br/>
-                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
-                                <strong>Changes Made:</strong><br/>
-                                {changesHtml}<br/><br/>
-                                Please review the updated application in the BGP app.");
-
-                            await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
-                        }
-
-                        // 2. Confirmation email to Captain
-                        var captainMemberInfo = await _repository.GetMemberById(application.CaptainMemberId);
-                        if (captainMemberInfo != null && !string.IsNullOrWhiteSpace(captainMemberInfo.Email))
-                        {
-                            var captainBody = BuildEmailHtml(
-                                $"Dear {application.CaptainName},",
-                                $@"You have edited the Qardan Hasana application <strong>{application.ApplicationNo}</strong>.
-                                <br/><br/>
-                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
-                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
-                                <strong>Changes Made:</strong><br/>
-                                {changesHtml}<br/><br/>
-                                This is a confirmation of your changes.");
-
-                            await _emailService.SendEmailAsync(captainMemberInfo.Email, subject, captainBody);
-                        }
-
-                        // 3. Email to all Resource Admins
-                        var admins = await _repository.GetResourceAdmins();
-                        foreach (var admin in admins)
-                        {
-                            if (string.IsNullOrWhiteSpace(admin.Email)) continue;
-
-                            var adminBody = BuildEmailHtml(
-                                $"Dear {admin.FullName},",
-                                $@"A Qardan Hasana application has been edited by Captain <strong>{application.CaptainName}</strong>.
-                                <br/><br/>
-                                <strong>Application No:</strong> {application.ApplicationNo}<br/>
-                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
-                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
-                                <strong>Changes Made:</strong><br/>
-                                {changesHtml}<br/><br/>
-                                Please review this in the BGP Admin Portal if needed.");
-
-                            await _emailService.SendEmailAsync(admin.Email, subject, adminBody);
-                        }
+                        await _emailService.SendEmailAsync(g1Info.Email, subject, g1Body);
                     }
-                    else
-                    {
-                        // === Applicant edited: notify Captain only ===
-                        var captainMemberInfo = await _repository.GetMemberById(application.CaptainMemberId);
-                        if (captainMemberInfo != null && !string.IsNullOrWhiteSpace(captainMemberInfo.Email))
-                        {
-                            var captainBody = BuildEmailHtml(
-                                $"Dear {application.CaptainName},",
-                                $@"The Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited by the applicant.
-                                <br/><br/>
-                                <strong>Applicant:</strong> {request.ApplicantName}<br/>
-                                <strong>Amount:</strong> ₹{request.AmountRequested:N2}<br/><br/>
-                                <strong>Changes Made:</strong><br/>
-                                {changesHtml}<br/><br/>
-                                Please review the updated application in the BGP app before approving.");
 
-                            await _emailService.SendEmailAsync(captainMemberInfo.Email, subject, captainBody);
-                        }
+                    var g2Info = await _repository.GetMemberById(guarantor2Member.Id);
+                    if (g2Info != null && !string.IsNullOrWhiteSpace(g2Info.Email))
+                    {
+                        var g2Body = BuildEmailHtml(
+                            $"Dear {guarantor2Member.FullName},",
+                            $@"The Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been edited.
+                            <br/><br/>
+                            <strong>Changes Made:</strong><br/>
+                            {changesHtml}<br/><br/>
+                            Please review and re-approve this application in the BGP app.");
+
+                        await _emailService.SendEmailAsync(g2Info.Email, subject, g2Body);
                     }
                 }
                 catch (Exception ex)
@@ -696,28 +701,47 @@ public class QardanHasanaService : IQardanHasanaService
         return result!;
     }
 
-    public async Task CaptainApprove(int applicationId, int captainMemberId)
+    public async Task GuarantorApprove(int applicationId, int guarantorMemberId)
     {
         // Get application
         var application = await _repository.GetById(applicationId);
         if (application == null)
             throw new Exception("Application not found.");
 
-        // Verify caller is the Captain assigned to this application
-        if (application.CaptainMemberId != captainMemberId)
-            throw new Exception("Only the assigned Captain can approve this application.");
+        if (application.Status == "rejected")
+            throw new Exception("This application has been rejected.");
+
+        // Determine which guarantor is calling
+        var isGuarantor1 = application.CaptainMemberId == guarantorMemberId;
+        var isGuarantor2 = application.GuarantorMemberId == guarantorMemberId;
+
+        if (!isGuarantor1 && !isGuarantor2)
+            throw new Exception("Only an assigned Guarantor can approve this application.");
 
         // Check if already approved
-        if (application.CaptainApproved)
-            throw new Exception("This application has already been approved by the Captain.");
+        if (isGuarantor1 && application.CaptainApproved)
+            throw new Exception("You have already approved this application as Guarantor 1.");
 
-        // Mark as captain-approved
-        await _repository.CaptainApprove(applicationId);
+        if (isGuarantor2 && application.GuarantorApproved)
+            throw new Exception("You have already approved this application as Guarantor 2.");
 
-        _logger.LogInformation("Qardan Hasana application {Id} ({AppNo}) captain-approved by member {CaptainId}",
-            applicationId, application.ApplicationNo, captainMemberId);
+        // Mark as approved
+        if (isGuarantor1)
+        {
+            await _repository.CaptainApprove(applicationId);
+        }
+        else
+        {
+            await _repository.GuarantorApprove(applicationId);
+        }
 
-        // Activity Log for captain approval
+        var guarantorLabel = isGuarantor1 ? "Guarantor 1" : "Guarantor 2";
+        var guarantorName = isGuarantor1 ? application.CaptainName : application.GuarantorName;
+
+        _logger.LogInformation("Qardan Hasana application {Id} ({AppNo}) {GuarantorLabel} approved by member {GuarantorId}",
+            applicationId, application.ApplicationNo, guarantorLabel, guarantorMemberId);
+
+        // Activity Log for guarantor approval
         _ = Task.Run(async () =>
         {
             try
@@ -726,60 +750,161 @@ public class QardanHasanaService : IQardanHasanaService
                 {
                     EntityType = ActivityEntityType.QardanHasana,
                     EntityId = applicationId,
-                    Action = ActivityAction.QardanHasanaCaptainApproved,
-                    PerformedBy = application.CaptainName,
-                    PerformedById = captainMemberId,
-                    PerformedByRole = "Captain",
+                    Action = isGuarantor1 ? ActivityAction.QardanHasanaGuarantor1Approved : ActivityAction.QardanHasanaGuarantorApproved,
+                    PerformedBy = guarantorName,
+                    PerformedById = guarantorMemberId,
+                    PerformedByRole = guarantorLabel,
                     TargetMemberId = application.ApplicantMemberId,
                     TargetMemberName = $"{application.ApplicantName} (ITS: {application.ApplicantItsId})",
                     NewValue = "Approved",
-                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, applicantName = application.ApplicantName, amountRequested = application.AmountRequested }),
+                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, applicantName = application.ApplicantName, amountRequested = application.AmountRequested, guarantorRole = guarantorLabel }),
                     CreatedAt = DateTime.UtcNow
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Failed to log Qardan Hasana captain approval activity for {AppNo}: {Error}",
+                _logger.LogWarning("Failed to log Qardan Hasana guarantor approval activity for {AppNo}: {Error}",
                     application.ApplicationNo, ex.Message);
             }
         });
 
-        // Send email to all Resource Admins (fire-and-forget)
+        // Check if both guarantors have now approved — if so, notify admins
+        var refreshed = await _repository.GetById(applicationId);
+        var bothApproved = refreshed != null && refreshed.CaptainApproved && refreshed.GuarantorApproved;
+
+        // Send emails (fire-and-forget)
         _ = Task.Run(async () =>
         {
             try
             {
-                var admins = await _repository.GetResourceAdmins();
-                foreach (var admin in admins)
+                // Notify applicant
+                var applicantInfo = await _repository.GetMemberById(application.ApplicantMemberId);
+                if (applicantInfo != null && !string.IsNullOrWhiteSpace(applicantInfo.Email))
                 {
-                    if (string.IsNullOrWhiteSpace(admin.Email)) continue;
+                    var subject = $"Qardan Hasana - {guarantorLabel} Approved - {application.ApplicationNo}";
+                    var body = BuildEmailHtml(
+                        $"Dear {application.ApplicantName},",
+                        $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been approved by <strong>{guarantorName}</strong> ({guarantorLabel}).
+                        <br/><br/>
+                        {(bothApproved
+                            ? "Both guarantors have now approved your application. It has been forwarded to the Resource Admin for sanctioning."
+                            : "Waiting for the other guarantor to approve before the application can proceed.")}");
 
-                    var subject = $"Qardan Hasana Approved by Captain - {application.ApplicationNo}";
-                    var body = $@"
-<h2 style='color: #4A1C1C;'>Qardan Hasana - Captain Approval Notification</h2>
-<p>Dear {admin.FullName},</p>
-<p>The following Qardan Hasana application has been <strong style='color: green;'>approved by the Captain</strong>:</p>
-<table style='border-collapse: collapse; width: 100%; max-width: 500px;'>
-    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Application No</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.ApplicationNo}</td></tr>
-    <tr><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Applicant Name</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.ApplicantName}</td></tr>
-    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Mohallah</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.ApplicantJamaat}</td></tr>
-    <tr><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Amount Requested</td><td style='padding: 8px; border: 1px solid #ddd;'>₹{application.AmountRequested:N2}</td></tr>
-    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Reason</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.Reason ?? "—"}</td></tr>
-    <tr><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Captain</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.CaptainName}</td></tr>
-    <tr style='background-color: #f5f5f5;'><td style='padding: 8px; font-weight: bold; border: 1px solid #ddd;'>Guarantor</td><td style='padding: 8px; border: 1px solid #ddd;'>{application.GuarantorName}</td></tr>
-</table>
-<p>Please review this application in the BGP Admin Portal.</p>
-<p style='color: #999; font-size: 12px;'>This is an automated notification from Burhani Guards Pune.</p>";
-
-                    await _emailService.SendEmailAsync(admin.Email, subject, body);
+                    await _emailService.SendEmailAsync(applicantInfo.Email, subject, body);
                 }
 
-                _logger.LogInformation("Captain approval emails sent to {Count} admins for application {AppNo}",
-                    admins.Count, application.ApplicationNo);
+                // If both approved, notify admins
+                if (bothApproved)
+                {
+                    var admins = await _repository.GetResourceAdmins();
+                    foreach (var admin in admins)
+                    {
+                        if (string.IsNullOrWhiteSpace(admin.Email)) continue;
+
+                        var subject = $"Qardan Hasana - Both Guarantors Approved - {application.ApplicationNo}";
+                        var body = BuildEmailHtml(
+                            $"Dear {admin.FullName},",
+                            $@"Both guarantors have approved the following Qardan Hasana application:
+                            <br/><br/>
+                            <strong>Application No:</strong> {application.ApplicationNo}<br/>
+                            <strong>Applicant:</strong> {application.ApplicantName}<br/>
+                            <strong>Amount:</strong> ₹{application.AmountRequested:N2}<br/>
+                            <strong>Guarantor 1:</strong> {application.CaptainName} ✓<br/>
+                            <strong>Guarantor 2:</strong> {application.GuarantorName} ✓<br/><br/>
+                            Please review this application in the BGP Admin Portal for sanctioning.");
+
+                        await _emailService.SendEmailAsync(admin.Email, subject, body);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Failed to send captain approval emails for application {Id}: {Error}",
+                _logger.LogWarning("Failed to send guarantor approval emails for application {Id}: {Error}",
+                    applicationId, ex.Message);
+            }
+        });
+    }
+
+    public async Task GuarantorReject(int applicationId, int guarantorMemberId, string? reason)
+    {
+        var application = await _repository.GetById(applicationId);
+        if (application == null)
+            throw new Exception("Application not found.");
+
+        if (application.Status == "sanctioned")
+            throw new Exception("Cannot reject a sanctioned application.");
+
+        if (application.Status == "rejected")
+            throw new Exception("Application is already rejected.");
+
+        // Verify caller is a guarantor
+        var isGuarantor1 = application.CaptainMemberId == guarantorMemberId;
+        var isGuarantor2 = application.GuarantorMemberId == guarantorMemberId;
+
+        if (!isGuarantor1 && !isGuarantor2)
+            throw new Exception("Only an assigned Guarantor can reject this application.");
+
+        var guarantorLabel = isGuarantor1 ? "Guarantor 1" : "Guarantor 2";
+        var guarantorName = isGuarantor1 ? application.CaptainName : application.GuarantorName;
+
+        var rejectionText = $"Rejected by {guarantorLabel} ({guarantorName})" +
+            (string.IsNullOrWhiteSpace(reason) ? "" : $": {reason}");
+
+        // Mark application as rejected
+        await _repository.Reject(applicationId, rejectionText, guarantorMemberId);
+
+        _logger.LogInformation("Qardan Hasana application {Id} ({AppNo}) rejected by {GuarantorLabel} (member {GuarantorId}). Reason: {Reason}",
+            applicationId, application.ApplicationNo, guarantorLabel, guarantorMemberId, reason);
+
+        // Activity Log
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _activityLogService.LogAsync(new ActivityLogModel
+                {
+                    EntityType = ActivityEntityType.QardanHasana,
+                    EntityId = applicationId,
+                    Action = ActivityAction.QardanHasanaGuarantorRejected,
+                    PerformedBy = guarantorName,
+                    PerformedById = guarantorMemberId,
+                    PerformedByRole = guarantorLabel,
+                    TargetMemberId = application.ApplicantMemberId,
+                    TargetMemberName = $"{application.ApplicantName} (ITS: {application.ApplicantItsId})",
+                    NewValue = "Rejected",
+                    Details = JsonSerializer.Serialize(new { applicationNo = application.ApplicationNo, guarantorRole = guarantorLabel, reason }),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to log Qardan Hasana guarantor rejection activity for {AppNo}: {Error}",
+                    application.ApplicationNo, ex.Message);
+            }
+        });
+
+        // Notify applicant (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var applicantInfo = await _repository.GetMemberById(application.ApplicantMemberId);
+                if (applicantInfo != null && !string.IsNullOrWhiteSpace(applicantInfo.Email))
+                {
+                    var subject = $"Qardan Hasana - Application Rejected - {application.ApplicationNo}";
+                    var body = BuildEmailHtml(
+                        $"Dear {application.ApplicantName},",
+                        $@"Your Qardan Hasana application <strong>{application.ApplicationNo}</strong> has been rejected by <strong>{guarantorName}</strong> ({guarantorLabel}).
+                        <br/><br/>
+                        <strong>Reason:</strong> {(string.IsNullOrWhiteSpace(reason) ? "No reason provided" : reason)}<br/><br/>
+                        You may submit a new application if needed.");
+
+                    await _emailService.SendEmailAsync(applicantInfo.Email, subject, body);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to send guarantor rejection email for application {Id}: {Error}",
                     applicationId, ex.Message);
             }
         });

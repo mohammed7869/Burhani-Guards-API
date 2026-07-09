@@ -31,9 +31,16 @@ public interface IQardanHasanaRepository
     Task<JamaatMemberResponse?> GetCaptainByJamaat(string jamaat);
     Task<MemberBasicInfo?> GetMemberById(int id);
     Task CaptainApprove(int id);
+    Task GuarantorApprove(int id);
     Task<List<MemberBasicInfo>> GetResourceAdmins();
     Task<bool> HasActiveApplication(int memberId);
     Task UpdateApplication(int id, string applicantName, string? applicantOccupation,
         string applicantMobile, string? reason, decimal amountRequested,
+        int captainMemberId, string captainName, string? captainMobile,
         int guarantorMemberId, string guarantorName, string? guarantorMobile);
+
+    /// <summary>
+    /// Get applications where the given member is a guarantor (Guarantor 1 or Guarantor 2)
+    /// </summary>
+    Task<List<QardanHasanaListResponse>> GetByGuarantorId(int memberId);
 }

@@ -60,7 +60,7 @@ public class QardanHasanaController : BaseController
     }
 
     /// <summary>
-    /// Get all Qardan Hasana applications (Admin sees all, Captain sees jamaat, Member sees own)
+    /// Get all Qardan Hasana applications (Admin sees all, Captain sees jamaat, Member sees own + guarantor)
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? status = null)
@@ -84,9 +84,19 @@ public class QardanHasanaController : BaseController
                 return Ok(jamaatApps);
             }
 
-            // Regular member sees own applications
+            // Regular member sees own applications + applications where they are guarantor
             var myApps = await _service.GetMyApplications(CurrentUser.id);
-            return Ok(myApps);
+            var guarantorApps = await _service.GetGuarantorApplications(CurrentUser.id);
+
+            // Merge and deduplicate
+            var allApps = myApps.ToList();
+            foreach (var gApp in guarantorApps)
+            {
+                if (!allApps.Any(a => a.Id == gApp.Id))
+                    allApps.Add(gApp);
+            }
+
+            return Ok(allApps.OrderByDescending(a => a.CreatedAt));
         }
         catch (Exception ex)
         {
@@ -115,6 +125,26 @@ public class QardanHasanaController : BaseController
     }
 
     /// <summary>
+    /// Get applications where the current user is a guarantor
+    /// </summary>
+    [HttpGet("my-guarantor-applications")]
+    public async Task<IActionResult> GetGuarantorApplications()
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        try
+        {
+            var applications = await _service.GetGuarantorApplications(CurrentUser.id);
+            return Ok(applications);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get single application by ID
     /// </summary>
     [HttpGet("{id:int}")]
@@ -129,7 +159,7 @@ public class QardanHasanaController : BaseController
             if (application == null)
                 return NotFound(new { message = "Application not found" });
 
-            // Check access: Admin can see all, Captain can see jamaat, Member can see own
+            // Check access: Admin can see all, Captain can see jamaat, Member can see own or guarantor
             if (CurrentUser.roles != 7 &&
                 CurrentUser.roles != 2 &&
                 application.ApplicantMemberId != CurrentUser.id &&
@@ -163,9 +193,6 @@ public class QardanHasanaController : BaseController
 
         try
         {
-            if (formImage == null || formImage.Length == 0)
-                return BadRequest(new { message = "Form image is required for sanctioning" });
-
             // Save admin signature
             string? adminSignatureUrl = null;
             if (adminSignature != null && adminSignature.Length > 0)
@@ -173,8 +200,12 @@ public class QardanHasanaController : BaseController
                 adminSignatureUrl = await SaveUploadedFile(adminSignature, id, "admin_sign");
             }
 
-            // Save form image
-            var formImageUrl = await SaveUploadedFile(formImage, id, "form");
+            // Save form image (optional)
+            string? formImageUrl = null;
+            if (formImage != null && formImage.Length > 0)
+            {
+                formImageUrl = await SaveUploadedFile(formImage, id, "form");
+            }
 
             await _service.Sanction(id, request, adminSignatureUrl, formImageUrl, CurrentUser.id);
             return Ok(new { message = "Application sanctioned successfully" });
@@ -233,7 +264,7 @@ public class QardanHasanaController : BaseController
     }
 
     /// <summary>
-    /// Get captain of current user's jamaat
+    /// Get captain of current user's jamaat (kept for backward compatibility)
     /// </summary>
     [HttpGet("my-captain")]
     public async Task<IActionResult> GetMyCaptain()
@@ -278,20 +309,20 @@ public class QardanHasanaController : BaseController
         }
     }
 
-    [HttpPut("{id}/captain-approve")]
-    public async Task<IActionResult> CaptainApprove(int id)
+    /// <summary>
+    /// Guarantor approves the application (works for both Guarantor 1 and Guarantor 2).
+    /// The service determines which guarantor the caller is based on their member ID.
+    /// </summary>
+    [HttpPut("{id}/guarantor-approve")]
+    public async Task<IActionResult> GuarantorApprove(int id)
     {
         if (CurrentUser == null)
             return Unauthorized();
 
-        // Only Captains (role=2) can approve
-        if (CurrentUser.roles != 2)
-            return Forbid();
-
         try
         {
-            await _service.CaptainApprove(id, CurrentUser.id);
-            return Ok(new { message = "Application approved by Captain successfully." });
+            await _service.GuarantorApprove(id, CurrentUser.id);
+            return Ok(new { message = "Application approved successfully." });
         }
         catch (Exception ex)
         {
@@ -300,7 +331,47 @@ public class QardanHasanaController : BaseController
     }
 
     /// <summary>
-    /// Applicant or Captain edits an application (only before captain approval)
+    /// Kept for backward compatibility — redirects to GuarantorApprove
+    /// </summary>
+    [HttpPut("{id}/captain-approve")]
+    public async Task<IActionResult> CaptainApprove(int id)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        try
+        {
+            await _service.GuarantorApprove(id, CurrentUser.id);
+            return Ok(new { message = "Application approved successfully." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Guarantor rejects the application
+    /// </summary>
+    [HttpPut("{id}/guarantor-reject")]
+    public async Task<IActionResult> GuarantorReject(int id, [FromBody] GuarantorRejectRequest request)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        try
+        {
+            await _service.GuarantorReject(id, CurrentUser.id, request.Reason);
+            return Ok(new { message = "Application rejected by guarantor." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Applicant or Guarantor edits an application (only before guarantor approvals)
     /// </summary>
     [HttpPut("{id:int}/edit")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateQardanHasanaRequest request)

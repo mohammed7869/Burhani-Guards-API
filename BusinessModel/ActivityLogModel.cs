@@ -63,7 +63,11 @@ public static class ActivityAction
     public const string QardanHasanaEdited = "QARDAN_HASANA_EDITED";
     public const string QardanHasanaCaptainEdited = "QARDAN_HASANA_CAPTAIN_EDITED";
     public const string QardanHasanaAdminEdited = "QARDAN_HASANA_ADMIN_EDITED";
-    public const string QardanHasanaCaptainApproved = "QARDAN_HASANA_CAPTAIN_APPROVED";
+    public const string QardanHasanaGuarantor1Approved = "QARDAN_HASANA_GUARANTOR1_APPROVED";
+    public const string QardanHasanaGuarantorApproved = "QARDAN_HASANA_GUARANTOR_APPROVED";
+    public const string QardanHasanaGuarantorRejected = "QARDAN_HASANA_GUARANTOR_REJECTED";
+    public const string QardanHasanaSanctioned = "QARDAN_HASANA_SANCTIONED";
+    public const string QardanHasanaRejected = "QARDAN_HASANA_REJECTED";
 }
 
 /// <summary>

@@ -22,7 +22,7 @@ public sealed class QardanHasana
     public string? ApplicantPhotoUrl { get; init; }
     public bool TermsAccepted { get; init; }
 
-    // Guarantor 1: Captain
+    // Guarantor 1 (stored in captain_* columns for backward compatibility)
     public int CaptainMemberId { get; init; }
     public string CaptainName { get; init; } = string.Empty;
     public string? CaptainMobile { get; init; }
@@ -33,6 +33,8 @@ public sealed class QardanHasana
     public int GuarantorMemberId { get; init; }
     public string GuarantorName { get; init; } = string.Empty;
     public string? GuarantorMobile { get; init; }
+    public bool GuarantorApproved { get; init; }
+    public DateTime? GuarantorApprovedAt { get; init; }
 
     // Status
     public string Status { get; init; } = "pending";

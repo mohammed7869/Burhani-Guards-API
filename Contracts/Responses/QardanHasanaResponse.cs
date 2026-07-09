@@ -12,6 +12,7 @@ public class QardanHasanaResponse
     public int ApplicantMemberId { get; set; }
     public string ApplicantItsId { get; set; } = string.Empty;
     public string ApplicantName { get; set; } = string.Empty;
+    public string? ApplicantMemberName { get; set; }  // Name from members table
     public string ApplicantJamaat { get; set; } = string.Empty;
     public string? ApplicantOccupation { get; set; }
     public string ApplicantMobile { get; set; } = string.Empty;
@@ -19,11 +20,14 @@ public class QardanHasanaResponse
     public decimal AmountRequested { get; set; }
     public string? ApplicantSignatureUrl { get; set; }
     public string? ApplicantPhotoUrl { get; set; }
+    public string? ApplicantProfile { get; set; }  // Profile photo filename from members table
 
-    // Guarantor 1: Captain
+    // Guarantor 1 (stored in captain_* columns for backward compatibility)
     public int CaptainMemberId { get; set; }
     public string CaptainName { get; set; } = string.Empty;
     public string? CaptainMobile { get; set; }
+    public string? CaptainItsId { get; set; }
+    public string? CaptainProfile { get; set; }
     public bool CaptainApproved { get; set; }
     public DateTime? CaptainApprovedAt { get; set; }
 
@@ -31,6 +35,10 @@ public class QardanHasanaResponse
     public int GuarantorMemberId { get; set; }
     public string GuarantorName { get; set; } = string.Empty;
     public string? GuarantorMobile { get; set; }
+    public string? GuarantorItsId { get; set; }
+    public string? GuarantorProfile { get; set; }
+    public bool GuarantorApproved { get; set; }
+    public DateTime? GuarantorApprovedAt { get; set; }
 
     // Status
     public string Status { get; set; } = "pending";
@@ -67,7 +75,9 @@ public class QardanHasanaListResponse
     public decimal? SanctionedAmount { get; set; }
     public string Status { get; set; } = string.Empty;
     public bool CaptainApproved { get; set; }
+    public bool GuarantorApproved { get; set; }
     public int CaptainMemberId { get; set; }
+    public int GuarantorMemberId { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
