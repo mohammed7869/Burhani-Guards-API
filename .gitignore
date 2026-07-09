@@ -330,3 +330,9 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
+# Custom files to ignore
+build_output.txt
+err.txt
+MIGRATION_*.sql
+bin_build_temp/
+publish_output/
