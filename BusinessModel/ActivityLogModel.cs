@@ -68,6 +68,8 @@ public static class ActivityAction
     public const string QardanHasanaGuarantorRejected = "QARDAN_HASANA_GUARANTOR_REJECTED";
     public const string QardanHasanaSanctioned = "QARDAN_HASANA_SANCTIONED";
     public const string QardanHasanaRejected = "QARDAN_HASANA_REJECTED";
+    public const string QardanHasanaRepaymentRecorded = "QARDAN_HASANA_REPAYMENT_RECORDED";
+    public const string QardanHasanaRepaymentDeleted = "QARDAN_HASANA_REPAYMENT_DELETED";
 }
 
 /// <summary>

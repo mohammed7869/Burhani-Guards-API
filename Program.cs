@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using BurhaniGuards.Api;
 using BurhaniGuards.Api.Contracts.Requests;
+using BurhaniGuards.Api.Hubs;
 using BurhaniGuards.Api.Models;
 using BurhaniGuards.Api.Persistence.Mongo;
 using BurhaniGuards.Api.Persistence.MySql;
@@ -35,6 +36,9 @@ builder.Services.AddControllers()
     {
         options.SuppressModelStateInvalidFilter = true;
     });
+
+// Add SignalR for real-time notifications
+builder.Services.AddSignalR();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -92,7 +96,9 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<IDapperMemberRepository, DapperMemberRepository>();
 builder.Services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
 builder.Services.AddScoped<IQardanHasanaRepository, QardanHasanaRepository>();
+builder.Services.AddScoped<IQardanRepaymentRepository, QardanRepaymentRepository>();
 builder.Services.AddScoped<ISurveyRepository, SurveyRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 
 // Register old repositories (for backward compatibility if needed)
 builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.ICaptainRepository, BurhaniGuards.Api.Repositories.SqlServer.CaptainRepository>();
@@ -106,7 +112,10 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IMiqaatService, MiqaatService>();
 builder.Services.AddScoped<IActivityLogService, ActivityLogService>();
 builder.Services.AddScoped<IQardanHasanaService, QardanHasanaService>();
+builder.Services.AddScoped<IQardanRepaymentService, QardanRepaymentService>();
 builder.Services.AddScoped<ISurveyService, SurveyService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddSingleton<IFcmPushService, FcmPushService>();
 
 // Register old services (for backward compatibility if needed)
 builder.Services.AddScoped<ICaptainAuthService, CaptainAuthService>();
@@ -135,14 +144,15 @@ builder.Services.AddAuthentication(options =>
 .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, BurhaniGuards.Api.Middleware.TokenAuthenticationHandler>(
     "Bearer", options => { });
 
-// Add CORS for Flutter app
+// Add CORS for Flutter app and SignalR
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true) // Allow all origins (needed for mobile apps)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials(); // Required for SignalR WebSocket connections
     });
 });
 
@@ -186,6 +196,9 @@ if (Directory.Exists(uploadPath))
 
 // Map Controllers
 app.MapControllers();
+
+// Map SignalR notification hub
+app.MapHub<NotificationHub>("/hubs/notification");
 
 app.Run();
 

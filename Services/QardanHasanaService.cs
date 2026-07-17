@@ -329,7 +329,8 @@ public class QardanHasanaService : IQardanHasanaService
             Both your Guarantors ({guarantor1Name} and {guarantor2Name}) will receive an email to review and approve your application from the BGP app.<br/><br/>
             Once both guarantors approve, the application will be forwarded to the Resource Admin for sanctioning.");
 
-        await _emailService.SendEmailAsync(applicantEmail, subject, applicantBody);
+        // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+        // await _emailService.SendEmailAsync(applicantEmail, subject, applicantBody);
 
         // Email to Guarantor 1
         if (!string.IsNullOrWhiteSpace(guarantor1Email))
@@ -345,7 +346,8 @@ public class QardanHasanaService : IQardanHasanaService
                 Please open the BGP app, review the application details, and approve or reject this request.
                 By approving, you accept joint responsibility for repayment in case of default as per BGP Qardan Hasana terms.");
 
-            await _emailService.SendEmailAsync(guarantor1Email, subject, g1Body);
+            // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+            // await _emailService.SendEmailAsync(guarantor1Email, subject, g1Body);
         }
 
         // Email to Guarantor 2
@@ -362,7 +364,8 @@ public class QardanHasanaService : IQardanHasanaService
                 Please open the BGP app, review the application details, and approve or reject this request.
                 By approving, you accept joint responsibility for repayment in case of default as per BGP Qardan Hasana terms.");
 
-            await _emailService.SendEmailAsync(guarantor2Email, subject, g2Body);
+            // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+            // await _emailService.SendEmailAsync(guarantor2Email, subject, g2Body);
         }
     }
 
@@ -656,7 +659,8 @@ public class QardanHasanaService : IQardanHasanaService
                             {changesHtml}<br/><br/>
                             Both guarantors will need to re-approve this application.");
 
-                        await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
+                        // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                        // await _emailService.SendEmailAsync(applicantMemberInfo.Email, subject, applicantBody);
                     }
 
                     // Notify both guarantors
@@ -671,7 +675,8 @@ public class QardanHasanaService : IQardanHasanaService
                             {changesHtml}<br/><br/>
                             Please review and re-approve this application in the BGP app.");
 
-                        await _emailService.SendEmailAsync(g1Info.Email, subject, g1Body);
+                        // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                        // await _emailService.SendEmailAsync(g1Info.Email, subject, g1Body);
                     }
 
                     var g2Info = await _repository.GetMemberById(guarantor2Member.Id);
@@ -685,7 +690,8 @@ public class QardanHasanaService : IQardanHasanaService
                             {changesHtml}<br/><br/>
                             Please review and re-approve this application in the BGP app.");
 
-                        await _emailService.SendEmailAsync(g2Info.Email, subject, g2Body);
+                        // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                        // await _emailService.SendEmailAsync(g2Info.Email, subject, g2Body);
                     }
                 }
                 catch (Exception ex)
@@ -790,7 +796,8 @@ public class QardanHasanaService : IQardanHasanaService
                             ? "Both guarantors have now approved your application. It has been forwarded to the Resource Admin for sanctioning."
                             : "Waiting for the other guarantor to approve before the application can proceed.")}");
 
-                    await _emailService.SendEmailAsync(applicantInfo.Email, subject, body);
+                    // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                    // await _emailService.SendEmailAsync(applicantInfo.Email, subject, body);
                 }
 
                 // If both approved, notify admins
@@ -813,7 +820,8 @@ public class QardanHasanaService : IQardanHasanaService
                             <strong>Guarantor 2:</strong> {application.GuarantorName} ✓<br/><br/>
                             Please review this application in the BGP Admin Portal for sanctioning.");
 
-                        await _emailService.SendEmailAsync(admin.Email, subject, body);
+                        // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                        // await _emailService.SendEmailAsync(admin.Email, subject, body);
                     }
                 }
             }
@@ -899,7 +907,8 @@ public class QardanHasanaService : IQardanHasanaService
                         <strong>Reason:</strong> {(string.IsNullOrWhiteSpace(reason) ? "No reason provided" : reason)}<br/><br/>
                         You may submit a new application if needed.");
 
-                    await _emailService.SendEmailAsync(applicantInfo.Email, subject, body);
+                    // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                    // await _emailService.SendEmailAsync(applicantInfo.Email, subject, body);
                 }
             }
             catch (Exception ex)

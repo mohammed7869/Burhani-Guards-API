@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using BurhaniGuards.Api.Repositories;
 using BurhaniGuards.Api.Services;
 using BurhaniGuards.Api.ViewModel;
 using Microsoft.AspNetCore.Authorization;
@@ -14,12 +15,14 @@ namespace BurhaniGuards.Api.Controllers;
 public class UserController : BaseController
 {
     private readonly IUserService _userService;
+    private readonly IUserRepository _userRepo;
     private readonly IWebHostEnvironment _environment;
     private const string UploadPath = @"C:\var\www\bgp_uploads";
 
-    public UserController(IUserService userService, IWebHostEnvironment environment)
+    public UserController(IUserService userService, IUserRepository userRepo, IWebHostEnvironment environment)
     {
         _userService = userService;
+        _userRepo = userRepo;
         _environment = environment;
     }
 
@@ -193,5 +196,37 @@ public class UserController : BaseController
             return StatusCode(500, new { message = $"Error uploading file: {ex.Message}" });
         }
     }
+
+    /// <summary>
+    /// Register or update the FCM device token for push notifications.
+    /// Called by the Flutter app after login and on token refresh.
+    /// </summary>
+    [HttpPost("fcm-token")]
+    public async Task<IActionResult> RegisterFcmToken([FromBody] FcmTokenRequest request)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(request?.Token))
+            return BadRequest(new { message = "Token is required" });
+
+        try
+        {
+            await _userRepo.UpdateFcmTokenAsync(CurrentUser.id, request.Token);
+            return Ok(new { message = "FCM token registered successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+}
+
+/// <summary>
+/// Request body for FCM token registration.
+/// </summary>
+public class FcmTokenRequest
+{
+    public string Token { get; set; } = string.Empty;
 }
 

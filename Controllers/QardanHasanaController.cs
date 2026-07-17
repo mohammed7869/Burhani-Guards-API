@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using BurhaniGuards.Api.Contracts.Requests;
 using BurhaniGuards.Api.Services;
+using BurhaniGuards.Api.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,10 +14,20 @@ namespace BurhaniGuards.Api.Controllers;
 public class QardanHasanaController : BaseController
 {
     private readonly IQardanHasanaService _service;
+    private readonly IQardanRepaymentService _repaymentService;
+    private readonly INotificationService _notificationService;
+    private readonly IUserRepository _userRepository;
 
-    public QardanHasanaController(IQardanHasanaService service)
+    public QardanHasanaController(
+        IQardanHasanaService service, 
+        IQardanRepaymentService repaymentService,
+        INotificationService notificationService,
+        IUserRepository userRepository)
     {
         _service = service;
+        _repaymentService = repaymentService;
+        _notificationService = notificationService;
+        _userRepository = userRepository;
     }
 
     /// <summary>
@@ -31,6 +42,31 @@ public class QardanHasanaController : BaseController
         try
         {
             var response = await _service.Create(request, CurrentUser);
+
+            // Notify both guarantors
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var msg = $"{request.ApplicantName} has requested a Qardan of ₹{request.AmountRequested} and added you as a guarantor. Please review.";
+                    
+                    var guarantors = new List<int>();
+                    if (request.Guarantor1MemberId > 0) guarantors.Add(request.Guarantor1MemberId);
+                    if (request.GuarantorMemberId > 0) guarantors.Add(request.GuarantorMemberId);
+
+                    if (guarantors.Any())
+                    {
+                        await _notificationService.SendToUsersAsync(
+                            guarantors.Distinct(),
+                            "Qardan Guarantor Request",
+                            msg,
+                            "qardan",
+                            response.Id.ToString());
+                    }
+                }
+                catch { /* Ignore notification error */ }
+            });
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -208,6 +244,26 @@ public class QardanHasanaController : BaseController
             }
 
             await _service.Sanction(id, request, adminSignatureUrl, formImageUrl, CurrentUser.id);
+
+            // Notify Applicant
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var application = await _service.GetById(id);
+                    if (application != null && application.ApplicantMemberId > 0)
+                    {
+                        await _notificationService.SendToUserAsync(
+                            application.ApplicantMemberId,
+                            "Qardan Sanctioned",
+                            $"Your Qardan application has been sanctioned by Admin for ₹{request.SanctionedAmount}.",
+                            "qardan",
+                            id.ToString());
+                    }
+                }
+                catch { /* Ignore notification error */ }
+            });
+
             return Ok(new { message = "Application sanctioned successfully" });
         }
         catch (Exception ex)
@@ -232,6 +288,26 @@ public class QardanHasanaController : BaseController
         try
         {
             await _service.Reject(id, request, CurrentUser.id);
+
+            // Notify Applicant
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var application = await _service.GetById(id);
+                    if (application != null && application.ApplicantMemberId > 0)
+                    {
+                        await _notificationService.SendToUserAsync(
+                            application.ApplicantMemberId,
+                            "Qardan Rejected",
+                            $"Your Qardan application was rejected by Admin. Reason: {request.Reason}",
+                            "qardan",
+                            id.ToString());
+                    }
+                }
+                catch { /* Ignore notification error */ }
+            });
+
             return Ok(new { message = "Application rejected" });
         }
         catch (Exception ex)
@@ -322,6 +398,41 @@ public class QardanHasanaController : BaseController
         try
         {
             await _service.GuarantorApprove(id, CurrentUser.id);
+
+            // Notify Applicant
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var application = await _service.GetById(id);
+                    if (application != null && application.ApplicantMemberId > 0)
+                    {
+                        await _notificationService.SendToUserAsync(
+                            application.ApplicantMemberId,
+                            "Guarantor Approved",
+                            $"Your guarantor {CurrentUser.fullName} has approved your Qardan application.",
+                            "qardan",
+                            id.ToString());
+                            
+                        // If both guarantors have approved, notify Resource Admins
+                        if (application.CaptainApproved && application.GuarantorApproved)
+                        {
+                            var adminIds = await _userRepository.GetAdminUserIdsAsync();
+                            if (adminIds.Any())
+                            {
+                                await _notificationService.SendToUsersAsync(
+                                    adminIds,
+                                    "Qardan Ready for Sanction",
+                                    $"{application.ApplicantName}'s application ({application.ApplicationNo}) has been approved by all guarantors and is ready for sanctioning.",
+                                    "qardan",
+                                    id.ToString());
+                            }
+                        }
+                    }
+                }
+                catch { /* Ignore notification error */ }
+            });
+
             return Ok(new { message = "Application approved successfully." });
         }
         catch (Exception ex)
@@ -341,8 +452,7 @@ public class QardanHasanaController : BaseController
 
         try
         {
-            await _service.GuarantorApprove(id, CurrentUser.id);
-            return Ok(new { message = "Application approved successfully." });
+            return await GuarantorApprove(id);
         }
         catch (Exception ex)
         {
@@ -362,6 +472,26 @@ public class QardanHasanaController : BaseController
         try
         {
             await _service.GuarantorReject(id, CurrentUser.id, request.Reason);
+
+            // Notify Applicant
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var application = await _service.GetById(id);
+                    if (application != null && application.ApplicantMemberId > 0)
+                    {
+                        await _notificationService.SendToUserAsync(
+                            application.ApplicantMemberId,
+                            "Guarantor Rejected",
+                            $"Your Qardan application was rejected by a guarantor. Reason: {request.Reason}",
+                            "qardan",
+                            id.ToString());
+                    }
+                }
+                catch { /* Ignore notification error */ }
+            });
+
             return Ok(new { message = "Application rejected by guarantor." });
         }
         catch (Exception ex)
@@ -390,6 +520,116 @@ public class QardanHasanaController : BaseController
         }
     }
 
+    /// <summary>
+    /// Get repayment summary + payment history for an application.
+    /// Accessible by Admin, Captain, or the applicant / assigned guarantors.
+    /// </summary>
+    [HttpGet("{id:int}/repayments")]
+    public async Task<IActionResult> GetRepayments(int id)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        try
+        {
+            var application = await _service.GetById(id);
+            if (application == null)
+                return NotFound(new { message = "Application not found" });
+
+            // Same access rule as GetById
+            if (CurrentUser.roles != 7 &&
+                CurrentUser.roles != 2 &&
+                application.ApplicantMemberId != CurrentUser.id &&
+                application.GuarantorMemberId != CurrentUser.id &&
+                application.CaptainMemberId != CurrentUser.id)
+            {
+                return Forbid("You do not have permission to view this application");
+            }
+
+            var summary = await _repaymentService.GetSummary(id);
+            return Ok(summary);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Record a repayment / installment payment (Resource Admin only).
+    /// Accepts an optional receipt/screenshot image via multipart form-data.
+    /// </summary>
+    [HttpPost("{id:int}/repayments")]
+    public async Task<IActionResult> RecordRepayment(int id, [FromForm] RecordRepaymentRequest request,
+        [FromForm] IFormFile? receiptImage)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        // Only Resource Admin (7) can record repayments
+        if (CurrentUser.roles != 7)
+            return Forbid("Only Resource Admin can record repayments");
+
+        try
+        {
+            string? receiptImageUrl = null;
+            if (receiptImage != null && receiptImage.Length > 0)
+            {
+                receiptImageUrl = await SaveRepaymentReceipt(receiptImage, id);
+            }
+
+            var response = await _repaymentService.RecordRepayment(id, request, receiptImageUrl, CurrentUser);
+
+            // Notify Applicant
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var application = await _service.GetById(id);
+                    if (application != null && application.ApplicantMemberId > 0)
+                    {
+                        await _notificationService.SendToUserAsync(
+                            application.ApplicantMemberId,
+                            "Repayment Recorded",
+                            $"A repayment of ₹{request.AmountPaid} has been recorded for your Qardan.",
+                            "qardan",
+                            id.ToString());
+                    }
+                }
+                catch { /* Ignore notification error */ }
+            });
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a recorded repayment (Resource Admin only, for corrections).
+    /// </summary>
+    [HttpDelete("{id:int}/repayments/{repaymentId:int}")]
+    public async Task<IActionResult> DeleteRepayment(int id, int repaymentId)
+    {
+        if (CurrentUser == null)
+            return Unauthorized();
+
+        if (CurrentUser.roles != 7)
+            return Forbid("Only Resource Admin can delete repayments");
+
+        try
+        {
+            await _repaymentService.DeleteRepayment(id, repaymentId, CurrentUser);
+            return Ok(new { message = "Repayment deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     #region Private Helpers
 
     private async Task<string> SaveUploadedFile(IFormFile file, int applicationId, string prefix)
@@ -410,6 +650,31 @@ public class QardanHasanaController : BaseController
         }
 
         return fileName;
+    }
+
+    /// <summary>
+    /// Saves a repayment receipt/screenshot and returns the relative path
+    /// (e.g. "bgp_uploads/qardan_repayments/qardan_8_receipt_20260712120000.jpg")
+    /// so it can be served directly via the static file middleware.
+    /// </summary>
+    private async Task<string> SaveRepaymentReceipt(IFormFile file, int applicationId)
+    {
+        var extension = Path.GetExtension(file.FileName)?.ToLower() ?? ".jpg";
+        if (string.IsNullOrWhiteSpace(extension)) extension = ".jpg";
+
+        var fileName = $"qardan_{applicationId}_receipt_{DateTime.UtcNow:yyyyMMddHHmmssfff}{extension}";
+
+        var uploadsPath = @"C:\var\www\bgp_uploads\qardan_repayments";
+        Directory.CreateDirectory(uploadsPath);
+
+        var filePath = Path.Combine(uploadsPath, fileName);
+
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        return $"bgp_uploads/qardan_repayments/{fileName}";
     }
 
     #endregion

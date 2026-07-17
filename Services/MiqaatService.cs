@@ -476,7 +476,8 @@ public class MiqaatService : IMiqaatService
                         </body>
                         </html>";
 
-                    await _emailService.SendBulkEmailAsync(emailList, subject, body);
+                    // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                    // await _emailService.SendBulkEmailAsync(emailList, subject, body);
 
                     if (parsedStatus == AdminApprovalStatus.Approved && !string.IsNullOrWhiteSpace(existingMiqaat.Jamaat))
                     {
@@ -530,7 +531,8 @@ public class MiqaatService : IMiqaatService
                                 </body>
                                 </html>";
 
-                            await _emailService.SendBulkEmailAsync(finalEmails, memberSubject, memberBody);
+                            // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                            // await _emailService.SendBulkEmailAsync(finalEmails, memberSubject, memberBody);
                         }
                     }
                 }
@@ -803,7 +805,8 @@ public class MiqaatService : IMiqaatService
 
                 if (emailList.Any())
                 {
-                    await _emailService.SendBulkEmailAsync(emailList, subject, body);
+                    // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                    // await _emailService.SendBulkEmailAsync(emailList, subject, body);
                 }
             }
             catch (Exception ex)
@@ -1056,7 +1059,8 @@ public class MiqaatService : IMiqaatService
                     </body>
                     </html>";
 
-                await _emailService.SendEmailAsync(member.Email, subject, body);
+                // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                // await _emailService.SendEmailAsync(member.Email, subject, body);
             }
             catch (Exception ex)
             {
@@ -1149,7 +1153,8 @@ public class MiqaatService : IMiqaatService
 
                 if (emailList.Any())
                 {
-                    await _emailService.SendBulkEmailAsync(emailList, subject, body);
+                    // Notification email disabled per request (only Miqaat creation and attendance emails are sent).
+                    // await _emailService.SendBulkEmailAsync(emailList, subject, body);
                 }
             }
             catch (Exception ex)

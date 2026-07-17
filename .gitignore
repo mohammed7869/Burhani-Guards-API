@@ -336,3 +336,6 @@ err.txt
 MIGRATION_*.sql
 bin_build_temp/
 publish_output/
+
+# Firebase credentials (NEVER commit)
+firebase-service-account.json

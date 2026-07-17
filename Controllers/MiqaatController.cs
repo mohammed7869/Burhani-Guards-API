@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using BurhaniGuards.Api.Contracts.Requests;
+using BurhaniGuards.Api.Repositories;
 using BurhaniGuards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,10 +14,14 @@ namespace BurhaniGuards.Api.Controllers;
 public class MiqaatController : BaseController
 {
     private readonly IMiqaatService _miqaatService;
+    private readonly INotificationService _notificationService;
+    private readonly IUserRepository _userRepo;
 
-    public MiqaatController(IMiqaatService miqaatService)
+    public MiqaatController(IMiqaatService miqaatService, INotificationService notificationService, IUserRepository userRepo)
     {
         _miqaatService = miqaatService;
+        _notificationService = notificationService;
+        _userRepo = userRepo;
     }
 
     [HttpPost]
@@ -36,6 +41,17 @@ public class MiqaatController : BaseController
         try
         {
             var response = await _miqaatService.Create(request, CurrentUser.fullName);
+
+            // Send notification to all members of the jamaat
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _sendMiqaatCreatedNotification(request, response.Id);
+                }
+                catch { /* Don't fail miqaat creation if notification fails */ }
+            });
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -55,6 +71,17 @@ public class MiqaatController : BaseController
         try
         {
             var response = await _miqaatService.CreateByAdmin(request, CurrentUser.fullName);
+
+            // Send notification to all members of the target jamaat(s)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _sendMiqaatCreatedNotification(request, response.Id);
+                }
+                catch { /* Don't fail miqaat creation if notification fails */ }
+            });
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -327,6 +354,33 @@ public class MiqaatController : BaseController
             }
 
             await _miqaatService.UpdateMemberMiqaatStatus(memberId, miqaatId, request.Status, days);
+
+            // Notify Captain when a member enrolls
+            if (request.Status?.ToLower() == "enrolled" || request.Status?.ToLower() == "approved")
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var miqaat = await _miqaatService.GetById(miqaatId);
+                        if (miqaat != null)
+                        {
+                            var captain = await _userRepo.GetCaptainByJamaatAsync(CurrentUser.jamaat ?? "");
+                            if (captain != null)
+                            {
+                                await _notificationService.SendToUserAsync(
+                                    (int)captain.Id,
+                                    "Member Enrolled: " + miqaat.MiqaatName,
+                                    $"{CurrentUser.fullName} has enrolled for '{miqaat.MiqaatName}'. Review their enrollment.",
+                                    "miqaat",
+                                    miqaatId.ToString());
+                            }
+                        }
+                    }
+                    catch { /* Don't fail enrollment if notification fails */ }
+                });
+            }
+
             return Ok(new { message = "Miqaat status updated successfully" });
         }
         catch (Exception ex)
@@ -483,6 +537,27 @@ public class MiqaatController : BaseController
             }
 
             await _miqaatService.UpdateFinalStatus(memberId, miqaatId, request.Status, days);
+
+            // Notify the member about captain's decision
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var miqaat = await _miqaatService.GetById(miqaatId);
+                    if (miqaat != null)
+                    {
+                        var statusText = request.Status?.ToLower() == "approved" ? "approved" : "updated";
+                        await _notificationService.SendToUserAsync(
+                            memberId,
+                            $"Enrollment {statusText}: {miqaat.MiqaatName}",
+                            $"Your enrollment for '{miqaat.MiqaatName}' has been {statusText} by the Captain.",
+                            "miqaat",
+                            miqaatId.ToString());
+                    }
+                }
+                catch { /* Don't fail status update if notification fails */ }
+            });
+
             return Ok(new { message = "Final status updated successfully" });
         }
         catch (Exception ex)
@@ -521,6 +596,27 @@ public class MiqaatController : BaseController
             }
 
             await _miqaatService.UpdateAdminStatus(memberId, miqaatId, request.Status, days);
+
+            // Notify the member about admin's decision for international miqaat
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var miqaat = await _miqaatService.GetById(miqaatId);
+                    if (miqaat != null)
+                    {
+                        var statusText = request.Status?.ToLower() == "approved" ? "approved" : "rejected";
+                        await _notificationService.SendToUserAsync(
+                            memberId,
+                            $"Admin {statusText}: {miqaat.MiqaatName}",
+                            $"Your enrollment for '{miqaat.MiqaatName}' has been {statusText} by Admin.",
+                            "miqaat",
+                            miqaatId.ToString());
+                    }
+                }
+                catch { /* Don't fail status update if notification fails */ }
+            });
+
             return Ok(new { message = "Admin status updated successfully" });
         }
         catch (Exception ex)
@@ -611,6 +707,22 @@ public class MiqaatController : BaseController
         try
         {
             await _miqaatService.MarkAttendanceBatch(miqaatId, request.Day, request.MemberIds);
+
+            // Notify each member that attendance was marked + 2 points allocated
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _notificationService.SendToUsersAsync(
+                        request.MemberIds,
+                        "Attendance Marked ✅",
+                        $"Your attendance has been marked for Day {request.Day}. +2 points allocated! Tap to view.",
+                        "miqaat",
+                        miqaatId.ToString());
+                }
+                catch { /* Don't fail attendance if notification fails */ }
+            });
+
             return Ok(new { message = "Attendance marked successfully" });
         }
         catch (Exception ex)
@@ -730,6 +842,42 @@ public class MiqaatController : BaseController
         catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Send miqaat creation notifications to all members of the target jamaat(s).
+    /// Handles comma-separated jamaats for International miqaats.
+    /// </summary>
+    private async Task _sendMiqaatCreatedNotification(CreateMiqaatRequest request, long miqaatId)
+    {
+        var miqaatType = request.MiqaatType ?? "Local";
+        var title = $"New Miqaat: {request.MiqaatName}";
+        var body = $"A new {miqaatType} miqaat '{request.MiqaatName}' has been created. Enroll now!";
+
+        // For International miqaats, Jamaat field is comma-separated
+        if (request.Jamaat.Contains(','))
+        {
+            var jamaats = request.Jamaat
+                .Split(',')
+                .Select(j => j.Trim())
+                .Where(j => !string.IsNullOrEmpty(j))
+                .ToList();
+
+            foreach (var jamaat in jamaats)
+            {
+                try
+                {
+                    await _notificationService.SendToJamaatAsync(
+                        jamaat, title, body, "miqaat", miqaatId.ToString());
+                }
+                catch { /* Continue with other jamaats even if one fails */ }
+            }
+        }
+        else
+        {
+            await _notificationService.SendToJamaatAsync(
+                request.Jamaat, title, body, "miqaat", miqaatId.ToString());
         }
     }
 }

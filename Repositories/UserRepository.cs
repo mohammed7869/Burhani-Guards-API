@@ -21,12 +21,18 @@ public interface IUserRepository
     Task UpdateProfileImage(UserModel model);
     Task<(List<JamiyatItem> Jamiyats, List<JamaatItem> Jamaats)> GetJamiyatJamaatWithCounts();
     Task<List<string>> GetAdminEmailsAsync();
+    Task<List<int>> GetAdminUserIdsAsync();
     Task<List<MemberModel>> GetMembersByJamiyatAsync(string jamiyat);
     Task<List<MemberModel>> GetMembersByJamaatAsync(string jamaat);
     Task<List<MemberModel>> GetHierarchyMembersByJamaatAsync(string jamaat);
     Task<MemberModel?> GetCaptainByFullNameAsync(string captainName);
     Task<MemberModel?> GetCaptainByJamaatAsync(string jamaat);
     Task ApproveMember(int id);
+    Task<IEnumerable<int>> GetAllUserIdsAsync();
+    Task<IEnumerable<int>> GetUserIdsByJamaatAsync(string jamaat);
+    Task UpdateFcmTokenAsync(int userId, string token);
+    Task<string?> GetFcmTokenAsync(int userId);
+    Task<Dictionary<int, string>> GetFcmTokensAsync(IEnumerable<int> userIds);
 }
 
 public class UserRepository : IUserRepository
@@ -567,6 +573,22 @@ public class UserRepository : IUserRepository
         }
     }
 
+    public async Task<List<int>> GetAdminUserIdsAsync()
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"
+                SELECT DISTINCT `id`
+                FROM `members`
+                WHERE (`roles` = 7 OR `rank` = 'Admin')
+                    AND `is_active` = 1
+            ";
+
+            var result = await connection.QueryAsync<int>(sql);
+            return result.ToList();
+        }
+    }
+
     public async Task<List<MemberModel>> GetMembersByJamiyatAsync(string jamiyat)
     {
         using (var connection = _context.CreateConnection())
@@ -874,6 +896,53 @@ public class UserRepository : IUserRepository
             {
                 throw new Exception("Member not found or inactive");
             }
+        }
+    }
+
+    public async Task<IEnumerable<int>> GetAllUserIdsAsync()
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"SELECT `id` FROM `members` WHERE `is_active` = 1";
+            return await connection.QueryAsync<int>(sql);
+        }
+    }
+
+    public async Task<IEnumerable<int>> GetUserIdsByJamaatAsync(string jamaat)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"SELECT `id` FROM `members` WHERE `jamaat` = @Jamaat AND `is_active` = 1";
+            return await connection.QueryAsync<int>(sql, new { Jamaat = jamaat });
+        }
+    }
+
+    public async Task UpdateFcmTokenAsync(int userId, string token)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"UPDATE `members` SET `fcm_token` = @Token WHERE `id` = @UserId";
+            await connection.ExecuteAsync(sql, new { Token = token, UserId = userId });
+        }
+    }
+
+    public async Task<string?> GetFcmTokenAsync(int userId)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"SELECT `fcm_token` FROM `members` WHERE `id` = @UserId AND `is_active` = 1";
+            return await connection.QuerySingleOrDefaultAsync<string?>(sql, new { UserId = userId });
+        }
+    }
+
+    public async Task<Dictionary<int, string>> GetFcmTokensAsync(IEnumerable<int> userIds)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"SELECT `id`, `fcm_token` FROM `members` 
+                        WHERE `id` IN @UserIds AND `is_active` = 1 AND `fcm_token` IS NOT NULL AND `fcm_token` != ''";
+            var results = await connection.QueryAsync<(int id, string fcm_token)>(sql, new { UserIds = userIds.ToList() });
+            return results.ToDictionary(r => r.id, r => r.fcm_token);
         }
     }
 }
