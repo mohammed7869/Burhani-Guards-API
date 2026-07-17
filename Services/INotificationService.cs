@@ -11,22 +11,22 @@ public interface INotificationService
     /// <summary>
     /// Send a notification to a specific user (persists + pushes via SignalR).
     /// </summary>
-    Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null);
+    Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null, string? imageUrl = null);
 
     /// <summary>
     /// Send a notification to multiple users.
     /// </summary>
-    Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null);
+    Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null, string? imageUrl = null);
 
     /// <summary>
     /// Broadcast a notification to all users.
     /// </summary>
-    Task BroadcastAsync(string title, string body, string type, string? referenceId = null);
+    Task BroadcastAsync(string title, string body, string type, string? referenceId = null, string? imageUrl = null);
 
     /// <summary>
     /// Send notification to all members of a specific jamaat.
     /// </summary>
-    Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null);
+    Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null, string? imageUrl = null);
 
     /// <summary>
     /// Get paginated notifications for a user.

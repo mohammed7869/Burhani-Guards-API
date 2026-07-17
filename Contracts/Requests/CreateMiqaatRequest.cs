@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace BurhaniGuards.Api.Contracts.Requests;
 
 public sealed record CreateMiqaatRequest(
@@ -8,6 +10,6 @@ public sealed record CreateMiqaatRequest(
     DateTime FromDate,
     DateTime TillDate,
     int VolunteerLimit,
-    string? AboutMiqaat
+    string? AboutMiqaat,
+    IFormFile? ImageFile
 );
-

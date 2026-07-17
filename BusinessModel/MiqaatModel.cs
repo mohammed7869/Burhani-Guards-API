@@ -14,6 +14,7 @@ public class MiqaatModel : BaseModel
     public int MiqaatDays { get; set; }
     public int VolunteerLimit { get; set; }
     public string? AboutMiqaat { get; set; }
+    public string? NotificationImage { get; set; }
     public AdminApprovalStatus AdminApproval { get; set; } = AdminApprovalStatus.Pending;
     public string CaptainName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

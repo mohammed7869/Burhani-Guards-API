@@ -12,13 +12,13 @@ public interface IFcmPushService
     /// <summary>
     /// Send a push notification to a single device via its FCM token.
     /// </summary>
-    Task<bool> SendAsync(string fcmToken, string title, string body, Dictionary<string, string>? data = null);
+    Task<bool> SendAsync(string fcmToken, string title, string body, Dictionary<string, string>? data = null, string? imageUrl = null);
 
     /// <summary>
     /// Send a push notification to multiple devices via their FCM tokens.
     /// Returns the count of successfully sent messages.
     /// </summary>
-    Task<int> SendToMultipleAsync(IEnumerable<string> fcmTokens, string title, string body, Dictionary<string, string>? data = null);
+    Task<int> SendToMultipleAsync(IEnumerable<string> fcmTokens, string title, string body, Dictionary<string, string>? data = null, string? imageUrl = null);
 }
 
 /// <summary>
@@ -78,7 +78,7 @@ public class FcmPushService : IFcmPushService
         catch { /* ignore if no permission */ }
     }
 
-    public async Task<bool> SendAsync(string fcmToken, string title, string body, Dictionary<string, string>? data = null)
+    public async Task<bool> SendAsync(string fcmToken, string title, string body, Dictionary<string, string>? data = null, string? imageUrl = null)
     {
         if (!_isInitialized || string.IsNullOrEmpty(fcmToken))
             return false;
@@ -92,6 +92,7 @@ public class FcmPushService : IFcmPushService
                 {
                     Title = title,
                     Body = body,
+                    ImageUrl = imageUrl
                 },
                 Android = new AndroidConfig
                 {
@@ -128,7 +129,7 @@ public class FcmPushService : IFcmPushService
         }
     }
 
-    public async Task<int> SendToMultipleAsync(IEnumerable<string> fcmTokens, string title, string body, Dictionary<string, string>? data = null)
+    public async Task<int> SendToMultipleAsync(IEnumerable<string> fcmTokens, string title, string body, Dictionary<string, string>? data = null, string? imageUrl = null)
     {
         if (!_isInitialized)
             return 0;
@@ -151,6 +152,7 @@ public class FcmPushService : IFcmPushService
                     {
                         Title = title,
                         Body = body,
+                        ImageUrl = imageUrl
                     },
                     Android = new AndroidConfig
                     {

@@ -25,7 +25,7 @@ public class MiqaatController : BaseController
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateMiqaatRequest request)
+    public async Task<IActionResult> Create([FromForm] CreateMiqaatRequest request)
     {
         if (CurrentUser == null)
         {
@@ -40,14 +40,15 @@ public class MiqaatController : BaseController
 
         try
         {
-            var response = await _miqaatService.Create(request, CurrentUser.fullName);
+            var notificationImage = await SaveNotificationImage(request.ImageFile);
+            var response = await _miqaatService.Create(request, CurrentUser.fullName, notificationImage);
 
             // Send notification to all members of the jamaat
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _sendMiqaatCreatedNotification(request, response.Id);
+                    await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
                 }
                 catch { /* Don't fail miqaat creation if notification fails */ }
             });
@@ -61,7 +62,7 @@ public class MiqaatController : BaseController
     }
 
     [HttpPost("admin-create")]
-    public async Task<IActionResult> CreateByAdmin([FromBody] CreateMiqaatRequest request)
+    public async Task<IActionResult> CreateByAdmin([FromForm] CreateMiqaatRequest request)
     {
         if (CurrentUser == null)
         {
@@ -70,14 +71,15 @@ public class MiqaatController : BaseController
 
         try
         {
-            var response = await _miqaatService.CreateByAdmin(request, CurrentUser.fullName);
+            var notificationImage = await SaveNotificationImage(request.ImageFile);
+            var response = await _miqaatService.CreateByAdmin(request, CurrentUser.fullName, notificationImage);
 
             // Send notification to all members of the target jamaat(s)
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _sendMiqaatCreatedNotification(request, response.Id);
+                    await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
                 }
                 catch { /* Don't fail miqaat creation if notification fails */ }
             });
@@ -849,7 +851,7 @@ public class MiqaatController : BaseController
     /// Send miqaat creation notifications to all members of the target jamaat(s).
     /// Handles comma-separated jamaats for International miqaats.
     /// </summary>
-    private async Task _sendMiqaatCreatedNotification(CreateMiqaatRequest request, long miqaatId)
+    private async Task _sendMiqaatCreatedNotification(CreateMiqaatRequest request, long miqaatId, string? notificationImage = null)
     {
         var miqaatType = request.MiqaatType ?? "Local";
         var title = $"New Miqaat: {request.MiqaatName}";
@@ -869,7 +871,7 @@ public class MiqaatController : BaseController
                 try
                 {
                     await _notificationService.SendToJamaatAsync(
-                        jamaat, title, body, "miqaat", miqaatId.ToString());
+                        jamaat, title, body, "miqaat", miqaatId.ToString(), notificationImage);
                 }
                 catch { /* Continue with other jamaats even if one fails */ }
             }
@@ -877,8 +879,35 @@ public class MiqaatController : BaseController
         else
         {
             await _notificationService.SendToJamaatAsync(
-                request.Jamaat, title, body, "miqaat", miqaatId.ToString());
+                request.Jamaat, title, body, "miqaat", miqaatId.ToString(), notificationImage);
         }
+    }
+
+    private async Task<string?> SaveNotificationImage(IFormFile? file)
+    {
+        if (file == null || file.Length == 0) return null;
+
+        var extension = Path.GetExtension(file.FileName)?.ToLower() ?? ".jpg";
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            extension = ".jpg";
+        }
+
+        var fileName = $"notification_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..8]}{extension}";
+        var uploadsPath = @"C:\var\www\bgp_uploads\notification_images";
+        Directory.CreateDirectory(uploadsPath);
+        
+        var filePath = Path.Combine(uploadsPath, fileName);
+        
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+        
+        // Use an absolute URL since push notifications are viewed outside the web app context.
+        // Assuming the base API domain is known, we could ideally pull from configuration.
+        // As per the app settings, it might be https://bgp.baawanerp.com
+        return $"https://bgp.baawanerp.com/bgp_uploads/notification_images/{fileName}";
     }
 }
 

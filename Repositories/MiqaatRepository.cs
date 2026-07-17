@@ -19,9 +19,9 @@ public class MiqaatRepository : IMiqaatRepository
         {
             var sql = @"
                 INSERT INTO `local_miqaat` 
-                (`miqaat_name`, `miqaat_type`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `admin_approval`, `captain_name`, `is_admin_created`, `created_at`, `updated_at`)
+                (`miqaat_name`, `miqaat_type`, `jamaat`, `jamiyat`, `from_date`, `till_date`, `miqaat_days`, `volunteer_limit`, `about_miqaat`, `notification_image`, `admin_approval`, `captain_name`, `is_admin_created`, `created_at`, `updated_at`)
                 VALUES 
-                (@MiqaatName, @MiqaatType, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @AdminApproval, @CaptainName, @IsAdminCreated, @CreatedAt, @UpdatedAt);
+                (@MiqaatName, @MiqaatType, @Jamaat, @Jamiyat, @FromDate, @TillDate, @MiqaatDays, @VolunteerLimit, @AboutMiqaat, @NotificationImage, @AdminApproval, @CaptainName, @IsAdminCreated, @CreatedAt, @UpdatedAt);
                 SELECT LAST_INSERT_ID();";
 
             var id = await connection.QuerySingleAsync<long>(sql, new
@@ -35,6 +35,7 @@ public class MiqaatRepository : IMiqaatRepository
                 model.MiqaatDays,
                 model.VolunteerLimit,
                 model.AboutMiqaat,
+                model.NotificationImage,
                 AdminApproval = model.AdminApproval.ToString(),
                 model.CaptainName,
                 model.IsAdminCreated,
@@ -62,6 +63,7 @@ public class MiqaatRepository : IMiqaatRepository
                     IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays,
                     `volunteer_limit` AS VolunteerLimit,
                     `about_miqaat` AS AboutMiqaat,
+                    `notification_image` AS NotificationImage,
                     `admin_approval` AS AdminApproval,
                     `captain_name` AS CaptainName,
                     `miqaat_image_1` AS MiqaatImage1,
@@ -96,6 +98,7 @@ public class MiqaatRepository : IMiqaatRepository
                     IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays,
                     `volunteer_limit` AS VolunteerLimit,
                     `about_miqaat` AS AboutMiqaat,
+                    `notification_image` AS NotificationImage,
                     `admin_approval` AS AdminApproval,
                     `captain_name` AS CaptainName,
                     `miqaat_image_1` AS MiqaatImage1,
@@ -179,6 +182,7 @@ public class MiqaatRepository : IMiqaatRepository
                     IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays,
                     `volunteer_limit` AS VolunteerLimit,
                     `about_miqaat` AS AboutMiqaat,
+                    `notification_image` AS NotificationImage,
                     `admin_approval` AS AdminApproval,
                     `captain_name` AS CaptainName,
                     `miqaat_image_1` AS MiqaatImage1,

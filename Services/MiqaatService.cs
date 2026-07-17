@@ -80,7 +80,7 @@ public class MiqaatService : IMiqaatService
     /// Creates a miqaat (used by Captains from Flutter app).
     /// Captain-created miqaats are always "Local" type and require admin approval.
     /// </summary>
-    public async Task<MiqaatResponse> Create(CreateMiqaatRequest request, string captainName)
+    public async Task<MiqaatResponse> Create(CreateMiqaatRequest request, string captainName, string? notificationImage = null)
     {
         var model = new MiqaatModel
         {
@@ -93,6 +93,7 @@ public class MiqaatService : IMiqaatService
             MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate),
             VolunteerLimit = request.VolunteerLimit,
             AboutMiqaat = request.AboutMiqaat,
+            NotificationImage = notificationImage,
             AdminApproval = AdminApprovalStatus.Pending,
             CaptainName = captainName,
             CreatedAt = DateTime.UtcNow,
@@ -169,7 +170,7 @@ public class MiqaatService : IMiqaatService
     /// Creates a miqaat by Admin from the web panel.
     /// Admin-created miqaats are auto-approved. For International miqaats, email is sent to ALL members.
     /// </summary>
-    public async Task<MiqaatResponse> CreateByAdmin(CreateMiqaatRequest request, string adminName)
+    public async Task<MiqaatResponse> CreateByAdmin(CreateMiqaatRequest request, string adminName, string? notificationImage = null)
     {
         var miqaatType = request.MiqaatType ?? "Local";
         if (miqaatType != "Local" && miqaatType != "International")
@@ -188,6 +189,7 @@ public class MiqaatService : IMiqaatService
             MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate),
             VolunteerLimit = request.VolunteerLimit,
             AboutMiqaat = request.AboutMiqaat,
+            NotificationImage = notificationImage,
             AdminApproval = AdminApprovalStatus.Approved, // Auto-approved when admin creates
             CaptainName = adminName,
             IsAdminCreated = true,

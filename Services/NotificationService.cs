@@ -33,7 +33,7 @@ public class NotificationService : INotificationService
         _logger = logger;
     }
 
-    public async Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null)
+    public async Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null, string? imageUrl = null)
     {
         try
         {
@@ -80,7 +80,7 @@ public class NotificationService : INotificationService
                             ["type"] = type,
                             ["referenceId"] = referenceId ?? ""
                         };
-                        await _fcmPushService.SendAsync(fcmToken, title, body, data);
+                        await _fcmPushService.SendAsync(fcmToken, title, body, data, imageUrl);
                     }
                 }
                 catch (Exception fcmEx)
@@ -98,7 +98,7 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null)
+    public async Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null, string? imageUrl = null)
     {
         var userIdList = userIds.ToList();
         
@@ -148,7 +148,7 @@ public class NotificationService : INotificationService
                             ["type"] = type,
                             ["referenceId"] = referenceId ?? ""
                         };
-                        await _fcmPushService.SendToMultipleAsync(fcmTokens.Values, title, body, data);
+                        await _fcmPushService.SendToMultipleAsync(fcmTokens.Values, title, body, data, imageUrl);
                     }
                 }
                 catch (Exception fcmEx)
@@ -166,7 +166,7 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task BroadcastAsync(string title, string body, string type, string? referenceId = null)
+    public async Task BroadcastAsync(string title, string body, string type, string? referenceId = null, string? imageUrl = null)
     {
         try
         {
@@ -214,7 +214,7 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null)
+    public async Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null, string? imageUrl = null)
     {
         try
         {
@@ -228,7 +228,7 @@ public class NotificationService : INotificationService
                 return;
             }
 
-            await SendToUsersAsync(userIdList, title, body, type, referenceId);
+            await SendToUsersAsync(userIdList, title, body, type, referenceId, imageUrl);
 
             _logger.LogInformation("Notification sent to jamaat {Jamaat} ({Count} users): {Title}", 
                 jamaat, userIdList.Count, title);
