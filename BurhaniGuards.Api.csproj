@@ -18,5 +18,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="FirebaseAdmin" Version="3.2.0" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <None Update="firebase-service-account.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
 

@@ -209,15 +209,28 @@ public class MiqaatService : IMiqaatService
         var currentUser = GetCurrentUser();
         _ = _activityLogService.LogMiqaatCreatedByAdminAsync(id, request.MiqaatName, adminName, currentUser?.id, miqaatType, request.Jamaat ?? "");
 
-        // Seed miqaat_members for the jamaat(s)
-        if (!string.IsNullOrWhiteSpace(request.Jamaat))
+        // Seed miqaat_members
+        bool hasSpecificMembers = false;
+        if (!string.IsNullOrWhiteSpace(request.MemberIds))
         {
-            await _miqaatMemberRepository.UpsertMembersForMiqaat(id, request.Jamaat, AdminApprovalStatus.Pending);
+            var memberIds = request.MemberIds
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(idStr => int.TryParse(idStr.Trim(), out var id) ? id : 0)
+                .Where(id => id > 0)
+                .ToList();
+
+            if (memberIds.Any())
+            {
+                hasSpecificMembers = true;
+                await _miqaatMemberRepository.UpsertSpecificMembersForMiqaat(id, memberIds, AdminApprovalStatus.Approved);
+            }
         }
 
-        // Auto-enroll the captain(s) of the selected jamaat(s) for all days
-        if (!string.IsNullOrWhiteSpace(request.Jamaat))
+        if (!hasSpecificMembers && !string.IsNullOrWhiteSpace(request.Jamaat))
         {
+            await _miqaatMemberRepository.UpsertMembersForMiqaat(id, request.Jamaat, AdminApprovalStatus.Pending);
+            
+            // Auto-enroll the captain(s) of the selected jamaat(s) for all days
             var jamaatList = request.Jamaat
                 .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(j => j.Trim())
@@ -677,7 +690,8 @@ public class MiqaatService : IMiqaatService
             null,
             null,
             false,
-            m.IsAdminCreated
+            m.IsAdminCreated,
+            null
         )).ToList();
     }
 
@@ -1423,7 +1437,8 @@ public class MiqaatService : IMiqaatService
             includeReport ? m.Notes : null,
             includeReport ? m.KhidmatDone : null,
             includeReport && m.IsReportSubmitted,
-            m.IsAdminCreated
+            m.IsAdminCreated,
+            m.NotificationImage
         );
     }
 

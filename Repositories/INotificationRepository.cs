@@ -46,4 +46,9 @@ public interface INotificationRepository
     /// Delete a notification (optional, for cleanup).
     /// </summary>
     Task<bool> DeleteAsync(int userId, int notificationId);
+
+    /// <summary>
+    /// Get all notification logs (admin only).
+    /// </summary>
+    Task<IEnumerable<Notification>> GetAllLogsAsync();
 }

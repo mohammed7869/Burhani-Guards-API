@@ -23,6 +23,7 @@ public sealed record MiqaatResponse(
     string? Notes,
     string? KhidmatDone,
     bool IsReportSubmitted,
-    bool IsAdminCreated
+    bool IsAdminCreated,
+    string? NotificationImage
 );
 

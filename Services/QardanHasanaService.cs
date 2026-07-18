@@ -195,8 +195,8 @@ public class QardanHasanaService : IQardanHasanaService
         if (!application.GuarantorApproved)
             throw new Exception("Guarantor 2 has not approved this application yet.");
 
-        if (request.SanctionedAmount <= 0 || request.SanctionedAmount > 20000)
-            throw new Exception("Sanctioned amount must be between ₹1 and ₹20,000.");
+        if (request.SanctionedAmount <= 0)
+            throw new Exception("Sanctioned amount must be greater than ₹0.");
 
         await _repository.Sanction(id,
             request.SanctionedAmount,

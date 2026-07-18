@@ -16,13 +16,32 @@ public class NotificationRepository : INotificationRepository
     {
         _context = context;
         _logger = logger;
+        
+        EnsureSchemaUpdated();
+    }
+
+    private void EnsureSchemaUpdated()
+    {
+        try
+        {
+            using var connection = _context.CreateConnection();
+            connection.Execute(@"
+                ALTER TABLE `notifications`
+                ADD COLUMN IF NOT EXISTS `image_url` VARCHAR(500) NULL DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS `link_url` VARCHAR(500) NULL DEFAULT NULL;
+            ");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update notifications schema (columns might already exist)");
+        }
     }
 
     public async Task<int> CreateAsync(Notification notification)
     {
         const string sql = @"
-            INSERT INTO `notifications` (`user_id`, `title`, `body`, `type`, `reference_id`, `is_read`, `created_at`)
-            VALUES (@UserId, @Title, @Body, @Type, @ReferenceId, 0, UTC_TIMESTAMP());
+            INSERT INTO `notifications` (`user_id`, `title`, `body`, `type`, `reference_id`, `image_url`, `link_url`, `is_read`, `created_at`)
+            VALUES (@UserId, @Title, @Body, @Type, @ReferenceId, @ImageUrl, @LinkUrl, 0, UTC_TIMESTAMP());
             SELECT LAST_INSERT_ID();";
 
         try
@@ -34,7 +53,9 @@ public class NotificationRepository : INotificationRepository
                 notification.Title,
                 notification.Body,
                 notification.Type,
-                notification.ReferenceId
+                notification.ReferenceId,
+                notification.ImageUrl,
+                notification.LinkUrl
             });
         }
         catch (Exception ex)
@@ -47,8 +68,8 @@ public class NotificationRepository : INotificationRepository
     public async Task BulkCreateAsync(IEnumerable<Notification> notifications)
     {
         const string sql = @"
-            INSERT INTO `notifications` (`user_id`, `title`, `body`, `type`, `reference_id`, `is_read`, `created_at`)
-            VALUES (@UserId, @Title, @Body, @Type, @ReferenceId, 0, UTC_TIMESTAMP())";
+            INSERT INTO `notifications` (`user_id`, `title`, `body`, `type`, `reference_id`, `image_url`, `link_url`, `is_read`, `created_at`)
+            VALUES (@UserId, @Title, @Body, @Type, @ReferenceId, @ImageUrl, @LinkUrl, 0, UTC_TIMESTAMP())";
 
         try
         {
@@ -64,7 +85,9 @@ public class NotificationRepository : INotificationRepository
                     notification.Title,
                     notification.Body,
                     notification.Type,
-                    notification.ReferenceId
+                    notification.ReferenceId,
+                    notification.ImageUrl,
+                    notification.LinkUrl
                 }, transaction);
             }
 
@@ -86,7 +109,9 @@ public class NotificationRepository : INotificationRepository
                 `title` AS Title, 
                 `body` AS Body, 
                 `type` AS Type, 
-                `reference_id` AS ReferenceId, 
+                `reference_id` AS ReferenceId,
+                `image_url` AS ImageUrl,
+                `link_url` AS LinkUrl,
                 `is_read` AS IsRead, 
                 `created_at` AS CreatedAt, 
                 `read_at` AS ReadAt
@@ -204,6 +229,37 @@ public class NotificationRepository : INotificationRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting notification {NotificationId}", notificationId);
+            throw;
+        }
+    }
+
+    public async Task<IEnumerable<Notification>> GetAllLogsAsync()
+    {
+        const string sql = @"
+            SELECT 
+                `id` AS Id, 
+                `user_id` AS UserId, 
+                `title` AS Title, 
+                `body` AS Body, 
+                `type` AS Type, 
+                `reference_id` AS ReferenceId,
+                `image_url` AS ImageUrl,
+                `link_url` AS LinkUrl,
+                `is_read` AS IsRead, 
+                `created_at` AS CreatedAt, 
+                `read_at` AS ReadAt
+            FROM `notifications`
+            ORDER BY `created_at` DESC
+            LIMIT 1000";
+
+        try
+        {
+            using var connection = _context.CreateConnection();
+            return await connection.QueryAsync<Notification>(sql);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all notification logs");
             throw;
         }
     }

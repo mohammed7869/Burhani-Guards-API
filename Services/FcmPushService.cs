@@ -102,6 +102,7 @@ public class FcmPushService : IFcmPushService
                         Sound = "default",
                         ClickAction = "FLUTTER_NOTIFICATION_CLICK",
                         ChannelId = "bgp_notifications",
+                        ImageUrl = imageUrl
                     }
                 },
                 Data = data ?? new Dictionary<string, string>()
@@ -162,6 +163,7 @@ public class FcmPushService : IFcmPushService
                             Sound = "default",
                             ClickAction = "FLUTTER_NOTIFICATION_CLICK",
                             ChannelId = "bgp_notifications",
+                            ImageUrl = imageUrl
                         }
                     },
                     Data = data ?? new Dictionary<string, string>()

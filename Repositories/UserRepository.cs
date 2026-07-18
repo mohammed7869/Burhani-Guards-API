@@ -30,6 +30,7 @@ public interface IUserRepository
     Task ApproveMember(int id);
     Task<IEnumerable<int>> GetAllUserIdsAsync();
     Task<IEnumerable<int>> GetUserIdsByJamaatAsync(string jamaat);
+    Task<IEnumerable<int>> GetUserIdsByJamiyatAsync(string jamiyat);
     Task UpdateFcmTokenAsync(int userId, string token);
     Task<string?> GetFcmTokenAsync(int userId);
     Task<Dictionary<int, string>> GetFcmTokensAsync(IEnumerable<int> userIds);
@@ -914,6 +915,15 @@ public class UserRepository : IUserRepository
         {
             var sql = @"SELECT `id` FROM `members` WHERE `jamaat` = @Jamaat AND `is_active` = 1";
             return await connection.QueryAsync<int>(sql, new { Jamaat = jamaat });
+        }
+    }
+
+    public async Task<IEnumerable<int>> GetUserIdsByJamiyatAsync(string jamiyat)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"SELECT `id` FROM `members` WHERE `jamiyat` = @Jamiyat AND `is_active` = 1";
+            return await connection.QueryAsync<int>(sql, new { Jamiyat = jamiyat });
         }
     }
 

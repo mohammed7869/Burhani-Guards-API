@@ -7,6 +7,7 @@ namespace BurhaniGuards.Api.Repositories;
 public interface IMiqaatMemberRepository
 {
     Task UpsertMembersForMiqaat(long miqaatId, string jamaat, AdminApprovalStatus status);
+    Task UpsertSpecificMembersForMiqaat(long miqaatId, List<int> memberIds, AdminApprovalStatus status);
     Task UpsertCaptainForMiqaat(int captainMemberId, long miqaatId, AdminApprovalStatus status);
     Task<List<MiqaatModel>> GetMiqaatsByMemberId(int memberId);
     Task UpdateMemberMiqaatStatus(int memberId, long miqaatId, string status, IReadOnlyCollection<int>? days);
@@ -101,6 +102,48 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 MiqaatId = miqaatId,
                 Day = day,
                 Status = status.ToString()
+            }));
+
+        await connection.ExecuteAsync(insertSql, parameters);
+    }
+
+    public async Task UpsertSpecificMembersForMiqaat(long miqaatId, List<int> memberIds, AdminApprovalStatus status)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Determine miqaat duration (inclusive) so we can create one row per day
+        const string miqaatDaysSql = """
+            SELECT IFNULL(`miqaat_days`, DATEDIFF(`till_date`, `from_date`) + 1) AS MiqaatDays
+            FROM `local_miqaat`
+            WHERE `id` = @MiqaatId
+        """;
+
+        var miqaatDays = await connection.QueryFirstOrDefaultAsync<int>(miqaatDaysSql, new { MiqaatId = miqaatId });
+        if (miqaatDays < 1)
+        {
+            miqaatDays = 1;
+        }
+
+        if (!memberIds.Any())
+        {
+            return;
+        }
+
+        const string insertSql = """
+            INSERT INTO `miqaat_members` (`member_id`, `miqaat_id`, `miqaat_day`, `status`, `final_status`, `admin_status`)
+            VALUES (@MemberId, @MiqaatId, @Day, @Status, @FinalStatus, @AdminStatus)
+            ON DUPLICATE KEY UPDATE `status` = VALUES(`status`), `final_status` = VALUES(`final_status`), `admin_status` = VALUES(`admin_status`);
+        """;
+
+        var parameters = memberIds
+            .SelectMany(id => Enumerable.Range(1, miqaatDays).Select(day => new
+            {
+                MemberId = id,
+                MiqaatId = miqaatId,
+                Day = day,
+                Status = status.ToString(),
+                FinalStatus = status.ToString(),
+                AdminStatus = status.ToString()
             }));
 
         await connection.ExecuteAsync(insertSql, parameters);

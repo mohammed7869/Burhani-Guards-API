@@ -11,5 +11,6 @@ public sealed record CreateMiqaatRequest(
     DateTime TillDate,
     int VolunteerLimit,
     string? AboutMiqaat,
-    IFormFile? ImageFile
+    IFormFile? ImageFile,
+    string? MemberIds
 );

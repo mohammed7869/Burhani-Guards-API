@@ -11,22 +11,27 @@ public interface INotificationService
     /// <summary>
     /// Send a notification to a specific user (persists + pushes via SignalR).
     /// </summary>
-    Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null, string? imageUrl = null);
+    Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null);
 
     /// <summary>
     /// Send a notification to multiple users.
     /// </summary>
-    Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null, string? imageUrl = null);
+    Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null);
 
     /// <summary>
     /// Broadcast a notification to all users.
     /// </summary>
-    Task BroadcastAsync(string title, string body, string type, string? referenceId = null, string? imageUrl = null);
+    Task BroadcastAsync(string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null);
 
     /// <summary>
     /// Send notification to all members of a specific jamaat.
     /// </summary>
-    Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null, string? imageUrl = null);
+    Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null);
+
+    /// <summary>
+    /// Send notification to all members of a specific jamiyat.
+    /// </summary>
+    Task SendToJamiyatAsync(string jamiyat, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null);
 
     /// <summary>
     /// Get paginated notifications for a user.
@@ -52,4 +57,9 @@ public interface INotificationService
     /// Delete a notification.
     /// </summary>
     Task<bool> DeleteAsync(int userId, int notificationId);
+
+    /// <summary>
+    /// Get all notification logs (admin only).
+    /// </summary>
+    Task<IEnumerable<NotificationDto>> GetAllLogsAsync();
 }

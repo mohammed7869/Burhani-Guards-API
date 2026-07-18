@@ -29,6 +29,34 @@ public class NotificationController : BaseController
     }
 
     /// <summary>
+    /// Get all notification logs (admin only).
+    /// GET /api/1/notifications/logs
+    /// </summary>
+    [HttpGet("logs")]
+    public async Task<IActionResult> GetNotificationLogs()
+    {
+        var user = GetCurrentUser();
+        if (user == null) return Unauthorized("User not authenticated");
+
+        // Check if user has admin role (roles bitmask: admin = 1)
+        if (user.roles == null || (user.roles & 1) == 0)
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var logs = await _notificationService.GetAllLogsAsync();
+            return Ok(logs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching notification logs");
+            return StatusCode(500, new { message = "Error fetching notification logs" });
+        }
+    }
+
+    /// <summary>
     /// Get paginated notifications for the authenticated user.
     /// GET /api/1/notifications?page=1&pageSize=20
     /// </summary>
@@ -198,6 +226,102 @@ public class NotificationController : BaseController
             _logger.LogError(ex, "Error sending notification");
             return StatusCode(500, new { message = "Error sending notification" });
         }
+    }
+
+    /// <summary>
+    /// Send a custom notification with image and link.
+    /// POST /api/1/notifications/send-custom
+    /// </summary>
+    [HttpPost("send-custom")]
+    public async Task<IActionResult> SendCustomNotification([FromForm] SendCustomNotificationRequest request)
+    {
+        var user = GetCurrentUser();
+        if (user == null) return Unauthorized("User not authenticated");
+
+        // Check if user has admin role (roles bitmask: admin = 1)
+        if (user.roles == null || (user.roles & 1) == 0)
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Title))
+                return BadRequest(new { message = "Title is required" });
+
+            if (string.IsNullOrWhiteSpace(request.Body))
+                return BadRequest(new { message = "Body is required" });
+
+            string? imageUrl = await SaveNotificationImage(request.ImageFile);
+
+            if (request.Broadcast)
+            {
+                await _notificationService.BroadcastAsync(
+                    request.Title, request.Body, "admin", null, imageUrl, request.LinkUrl);
+                return Ok(new { message = "Broadcast notification sent" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.TargetJamiyat))
+            {
+                await _notificationService.SendToJamiyatAsync(
+                    request.TargetJamiyat, request.Title, request.Body, "admin", null, imageUrl, request.LinkUrl);
+                return Ok(new { message = $"Notification sent to jamiyat: {request.TargetJamiyat}" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.TargetJamaat))
+            {
+                await _notificationService.SendToJamaatAsync(
+                    request.TargetJamaat, request.Title, request.Body, "admin", null, imageUrl, request.LinkUrl);
+                return Ok(new { message = $"Notification sent to jamaat: {request.TargetJamaat}" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.MemberIds))
+            {
+                var userIds = request.MemberIds
+                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(idStr => int.TryParse(idStr.Trim(), out var id) ? id : 0)
+                    .Where(id => id > 0)
+                    .ToList();
+
+                if (userIds.Any())
+                {
+                    await _notificationService.SendToUsersAsync(
+                        userIds, request.Title, request.Body, "admin", null, imageUrl, request.LinkUrl);
+                    return Ok(new { message = $"Notification sent to {userIds.Count} users" });
+                }
+            }
+
+            return BadRequest(new { message = "Specify MemberIds, TargetJamaat, TargetJamiyat, or set Broadcast to true" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending custom notification");
+            return StatusCode(500, new { message = "Error sending custom notification" });
+        }
+    }
+
+    private async Task<string?> SaveNotificationImage(IFormFile? file)
+    {
+        if (file == null || file.Length == 0) return null;
+
+        var extension = Path.GetExtension(file.FileName)?.ToLower() ?? ".jpg";
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            extension = ".jpg";
+        }
+
+        var fileName = $"custom_notif_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..8]}{extension}";
+        var uploadsPath = @"C:\var\www\bgp_uploads\notification_images";
+        Directory.CreateDirectory(uploadsPath);
+        
+        var filePath = Path.Combine(uploadsPath, fileName);
+        
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+        
+        return $"https://bgp.baawanerp.com/bgp_uploads/notification_images/{fileName}";
     }
 
     /// <summary>

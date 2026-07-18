@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+
 namespace BurhaniGuards.Api.Contracts.Requests;
 
 /// <summary>
@@ -6,10 +8,13 @@ namespace BurhaniGuards.Api.Contracts.Requests;
 public class NotificationDto
 {
     public int Id { get; set; }
+    public int UserId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public string? ReferenceId { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? LinkUrl { get; set; }
     public bool IsRead { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ReadAt { get; set; }
@@ -47,6 +52,29 @@ public class SendNotificationRequest
     /// Optional: target by jamaat name (e.g., send to all members of a specific jamaat).
     /// </summary>
     public string? TargetJamaat { get; set; }
+}
+
+/// <summary>
+/// Request to send a custom notification from admin panel (supports images and links).
+/// </summary>
+public class SendCustomNotificationRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string? LinkUrl { get; set; }
+    
+    // Comma-separated member ids for multipart/form-data
+    public string? MemberIds { get; set; }
+    
+    // Comma-separated jamaats
+    public string? TargetJamaat { get; set; }
+    
+    // Comma-separated jamiyats
+    public string? TargetJamiyat { get; set; }
+    
+    public bool Broadcast { get; set; }
+    
+    public IFormFile? ImageFile { get; set; }
 }
 
 /// <summary>

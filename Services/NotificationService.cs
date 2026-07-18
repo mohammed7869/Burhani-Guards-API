@@ -33,7 +33,7 @@ public class NotificationService : INotificationService
         _logger = logger;
     }
 
-    public async Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null, string? imageUrl = null)
+    public async Task SendToUserAsync(int userId, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null)
     {
         try
         {
@@ -44,7 +44,9 @@ public class NotificationService : INotificationService
                 Title = title,
                 Body = body,
                 Type = type,
-                ReferenceId = referenceId
+                ReferenceId = referenceId,
+                ImageUrl = imageUrl,
+                LinkUrl = linkUrl
             };
 
             var id = await _notificationRepo.CreateAsync(notification);
@@ -57,6 +59,8 @@ public class NotificationService : INotificationService
                 Body = body,
                 Type = type,
                 ReferenceId = referenceId,
+                ImageUrl = imageUrl,
+                LinkUrl = linkUrl,
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -80,6 +84,10 @@ public class NotificationService : INotificationService
                             ["type"] = type,
                             ["referenceId"] = referenceId ?? ""
                         };
+                        if (!string.IsNullOrEmpty(linkUrl))
+                        {
+                            data["linkUrl"] = linkUrl;
+                        }
                         await _fcmPushService.SendAsync(fcmToken, title, body, data, imageUrl);
                     }
                 }
@@ -98,7 +106,7 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null, string? imageUrl = null)
+    public async Task SendToUsersAsync(IEnumerable<int> userIds, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null)
     {
         var userIdList = userIds.ToList();
         
@@ -111,7 +119,9 @@ public class NotificationService : INotificationService
                 Title = title,
                 Body = body,
                 Type = type,
-                ReferenceId = referenceId
+                ReferenceId = referenceId,
+                ImageUrl = imageUrl,
+                LinkUrl = linkUrl
             });
 
             await _notificationRepo.BulkCreateAsync(notifications);
@@ -123,6 +133,8 @@ public class NotificationService : INotificationService
                 Body = body,
                 Type = type,
                 ReferenceId = referenceId,
+                ImageUrl = imageUrl,
+                LinkUrl = linkUrl,
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -148,6 +160,10 @@ public class NotificationService : INotificationService
                             ["type"] = type,
                             ["referenceId"] = referenceId ?? ""
                         };
+                        if (!string.IsNullOrEmpty(linkUrl))
+                        {
+                            data["linkUrl"] = linkUrl;
+                        }
                         await _fcmPushService.SendToMultipleAsync(fcmTokens.Values, title, body, data, imageUrl);
                     }
                 }
@@ -166,7 +182,7 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task BroadcastAsync(string title, string body, string type, string? referenceId = null, string? imageUrl = null)
+    public async Task BroadcastAsync(string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null)
     {
         try
         {
@@ -187,7 +203,9 @@ public class NotificationService : INotificationService
                 Title = title,
                 Body = body,
                 Type = type,
-                ReferenceId = referenceId
+                ReferenceId = referenceId,
+                ImageUrl = imageUrl,
+                LinkUrl = linkUrl
             });
 
             await _notificationRepo.BulkCreateAsync(notifications);
@@ -199,6 +217,8 @@ public class NotificationService : INotificationService
                 Body = body,
                 Type = type,
                 ReferenceId = referenceId,
+                ImageUrl = imageUrl,
+                LinkUrl = linkUrl,
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -214,7 +234,7 @@ public class NotificationService : INotificationService
         }
     }
 
-    public async Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null, string? imageUrl = null)
+    public async Task SendToJamaatAsync(string jamaat, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null)
     {
         try
         {
@@ -228,7 +248,7 @@ public class NotificationService : INotificationService
                 return;
             }
 
-            await SendToUsersAsync(userIdList, title, body, type, referenceId, imageUrl);
+            await SendToUsersAsync(userIdList, title, body, type, referenceId, imageUrl, linkUrl);
 
             _logger.LogInformation("Notification sent to jamaat {Jamaat} ({Count} users): {Title}", 
                 jamaat, userIdList.Count, title);
@@ -236,6 +256,32 @@ public class NotificationService : INotificationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending notification to jamaat {Jamaat}", jamaat);
+            throw;
+        }
+    }
+
+    public async Task SendToJamiyatAsync(string jamiyat, string title, string body, string type, string? referenceId = null, string? imageUrl = null, string? linkUrl = null)
+    {
+        try
+        {
+            // Get all user IDs for the jamiyat
+            var jamiyatUsers = await _userRepo.GetUserIdsByJamiyatAsync(jamiyat);
+            var userIdList = jamiyatUsers.ToList();
+
+            if (userIdList.Count == 0)
+            {
+                _logger.LogWarning("No users found for jamiyat {Jamiyat}", jamiyat);
+                return;
+            }
+
+            await SendToUsersAsync(userIdList, title, body, type, referenceId, imageUrl, linkUrl);
+
+            _logger.LogInformation("Notification sent to jamiyat {Jamiyat} ({Count} users): {Title}", 
+                jamiyat, userIdList.Count, title);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending notification to jamiyat {Jamiyat}", jamiyat);
             throw;
         }
     }
@@ -251,10 +297,13 @@ public class NotificationService : INotificationService
             Notifications = notifications.Select(n => new NotificationDto
             {
                 Id = n.Id,
+                UserId = n.UserId,
                 Title = n.Title,
                 Body = n.Body,
                 Type = n.Type,
                 ReferenceId = n.ReferenceId,
+                ImageUrl = n.ImageUrl,
+                LinkUrl = n.LinkUrl,
                 IsRead = n.IsRead,
                 CreatedAt = n.CreatedAt,
                 ReadAt = n.ReadAt
@@ -284,5 +333,26 @@ public class NotificationService : INotificationService
     public async Task<bool> DeleteAsync(int userId, int notificationId)
     {
         return await _notificationRepo.DeleteAsync(userId, notificationId);
+    }
+
+    public async Task<IEnumerable<NotificationDto>> GetAllLogsAsync()
+    {
+        var notifications = await _notificationRepo.GetAllLogsAsync();
+        return notifications.Select(n => new NotificationDto
+        {
+            Id = n.Id,
+            UserId = n.UserId,
+            Title = n.Title,
+            Body = n.Body,
+            Type = n.Type,
+            ReferenceId = n.ReferenceId,
+            ImageUrl = n.ImageUrl,
+            LinkUrl = n.LinkUrl,
+            IsRead = n.IsRead,
+            CreatedAt = n.CreatedAt,
+            ReadAt = n.ReadAt,
+            // Assuming NotificationDto might have UserId if needed, but since it doesn't currently, we might need to add it or return a different DTO.
+            // Oh wait, NotificationDto probably doesn't have UserId based on the GetUserNotificationsAsync method, let's map it anyway. Wait, the frontend needs `user_id`.
+        }).ToList();
     }
 }
