@@ -225,6 +225,34 @@ public class NotificationService : INotificationService
 
             await _hubContext.Clients.All.SendAsync("ReceiveNotification", dto);
 
+            // Fetch FCM tokens BEFORE Task.Run to avoid ObjectDisposedException
+            var fcmTokens = await _userRepo.GetFcmTokensAsync(userIdList);
+
+            // Also send via FCM for background/killed state delivery
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (fcmTokens.Count > 0)
+                    {
+                        var data = new Dictionary<string, string>
+                        {
+                            ["type"] = type,
+                            ["referenceId"] = referenceId ?? ""
+                        };
+                        if (!string.IsNullOrEmpty(linkUrl))
+                        {
+                            data["linkUrl"] = linkUrl;
+                        }
+                        await _fcmPushService.SendToMultipleAsync(fcmTokens.Values, title, body, data, imageUrl);
+                    }
+                }
+                catch (Exception fcmEx)
+                {
+                    _logger.LogWarning(fcmEx, "FCM broadcast push failed");
+                }
+            });
+
             _logger.LogInformation("Broadcast notification sent to {Count} users: {Title}", userIdList.Count, title);
         }
         catch (Exception ex)
@@ -238,9 +266,16 @@ public class NotificationService : INotificationService
     {
         try
         {
-            // Get all user IDs for the jamaat
-            var jamaatUsers = await _userRepo.GetUserIdsByJamaatAsync(jamaat);
-            var userIdList = jamaatUsers.ToList();
+            var jamaats = jamaat.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(j => j.Trim());
+            var userIdList = new List<int>();
+
+            foreach (var j in jamaats)
+            {
+                var jamaatUsers = await _userRepo.GetUserIdsByJamaatAsync(j);
+                userIdList.AddRange(jamaatUsers);
+            }
+
+            userIdList = userIdList.Distinct().ToList();
 
             if (userIdList.Count == 0)
             {
@@ -264,9 +299,16 @@ public class NotificationService : INotificationService
     {
         try
         {
-            // Get all user IDs for the jamiyat
-            var jamiyatUsers = await _userRepo.GetUserIdsByJamiyatAsync(jamiyat);
-            var userIdList = jamiyatUsers.ToList();
+            var jamiyats = jamiyat.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(j => j.Trim());
+            var userIdList = new List<int>();
+
+            foreach (var j in jamiyats)
+            {
+                var jamiyatUsers = await _userRepo.GetUserIdsByJamiyatAsync(j);
+                userIdList.AddRange(jamiyatUsers);
+            }
+
+            userIdList = userIdList.Distinct().ToList();
 
             if (userIdList.Count == 0)
             {
