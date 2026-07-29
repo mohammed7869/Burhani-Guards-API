@@ -44,14 +44,11 @@ public class MiqaatController : BaseController
             var response = await _miqaatService.Create(request, CurrentUser.fullName, notificationImage);
 
             // Send notification to all members of the jamaat
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
-                }
-                catch { /* Don't fail miqaat creation if notification fails */ }
-            });
+                await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
+            }
+            catch { /* Don't fail miqaat creation if notification fails */ }
 
             return Ok(response);
         }
@@ -75,14 +72,11 @@ public class MiqaatController : BaseController
             var response = await _miqaatService.CreateByAdmin(request, CurrentUser.fullName, notificationImage);
 
             // Send notification to all members of the target jamaat(s)
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
-                }
-                catch { /* Don't fail miqaat creation if notification fails */ }
-            });
+                await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
+            }
+            catch { /* Don't fail miqaat creation if notification fails */ }
 
             return Ok(response);
         }
@@ -360,27 +354,24 @@ public class MiqaatController : BaseController
             // Notify Captain when a member enrolls
             if (request.Status?.ToLower() == "enrolled" || request.Status?.ToLower() == "approved")
             {
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    var miqaat = await _miqaatService.GetById(miqaatId);
+                    if (miqaat != null)
                     {
-                        var miqaat = await _miqaatService.GetById(miqaatId);
-                        if (miqaat != null)
+                        var captain = await _userRepo.GetCaptainByJamaatAsync(CurrentUser.jamaat ?? "");
+                        if (captain != null)
                         {
-                            var captain = await _userRepo.GetCaptainByJamaatAsync(CurrentUser.jamaat ?? "");
-                            if (captain != null)
-                            {
-                                await _notificationService.SendToUserAsync(
-                                    (int)captain.Id,
-                                    "Member Enrolled: " + miqaat.MiqaatName,
-                                    $"{CurrentUser.fullName} has enrolled for '{miqaat.MiqaatName}'. Review their enrollment.",
-                                    "miqaat",
-                                    miqaatId.ToString());
-                            }
+                            await _notificationService.SendToUserAsync(
+                                (int)captain.Id,
+                                "Member Enrolled: " + miqaat.MiqaatName,
+                                $"{CurrentUser.fullName} has enrolled for '{miqaat.MiqaatName}'. Review their enrollment.",
+                                "miqaat",
+                                miqaatId.ToString());
                         }
                     }
-                    catch { /* Don't fail enrollment if notification fails */ }
-                });
+                }
+                catch { /* Don't fail enrollment if notification fails */ }
             }
 
             return Ok(new { message = "Miqaat status updated successfully" });
@@ -541,24 +532,21 @@ public class MiqaatController : BaseController
             await _miqaatService.UpdateFinalStatus(memberId, miqaatId, request.Status, days);
 
             // Notify the member about captain's decision
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                var miqaat = await _miqaatService.GetById(miqaatId);
+                if (miqaat != null)
                 {
-                    var miqaat = await _miqaatService.GetById(miqaatId);
-                    if (miqaat != null)
-                    {
-                        var statusText = request.Status?.ToLower() == "approved" ? "approved" : "updated";
-                        await _notificationService.SendToUserAsync(
-                            memberId,
-                            $"Enrollment {statusText}: {miqaat.MiqaatName}",
-                            $"Your enrollment for '{miqaat.MiqaatName}' has been {statusText} by the Captain.",
-                            "miqaat",
-                            miqaatId.ToString());
-                    }
+                    var statusText = request.Status?.ToLower() == "approved" ? "approved" : "updated";
+                    await _notificationService.SendToUserAsync(
+                        memberId,
+                        $"Enrollment {statusText}: {miqaat.MiqaatName}",
+                        $"Your enrollment for '{miqaat.MiqaatName}' has been {statusText} by the Captain.",
+                        "miqaat",
+                        miqaatId.ToString());
                 }
-                catch { /* Don't fail status update if notification fails */ }
-            });
+            }
+            catch { /* Don't fail status update if notification fails */ }
 
             return Ok(new { message = "Final status updated successfully" });
         }
@@ -600,24 +588,21 @@ public class MiqaatController : BaseController
             await _miqaatService.UpdateAdminStatus(memberId, miqaatId, request.Status, days);
 
             // Notify the member about admin's decision for international miqaat
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                var miqaat = await _miqaatService.GetById(miqaatId);
+                if (miqaat != null)
                 {
-                    var miqaat = await _miqaatService.GetById(miqaatId);
-                    if (miqaat != null)
-                    {
-                        var statusText = request.Status?.ToLower() == "approved" ? "approved" : "rejected";
-                        await _notificationService.SendToUserAsync(
-                            memberId,
-                            $"Admin {statusText}: {miqaat.MiqaatName}",
-                            $"Your enrollment for '{miqaat.MiqaatName}' has been {statusText} by Admin.",
-                            "miqaat",
-                            miqaatId.ToString());
-                    }
+                    var statusText = request.Status?.ToLower() == "approved" ? "approved" : "rejected";
+                    await _notificationService.SendToUserAsync(
+                        memberId,
+                        $"Admin {statusText}: {miqaat.MiqaatName}",
+                        $"Your enrollment for '{miqaat.MiqaatName}' has been {statusText} by Admin.",
+                        "miqaat",
+                        miqaatId.ToString());
                 }
-                catch { /* Don't fail status update if notification fails */ }
-            });
+            }
+            catch { /* Don't fail status update if notification fails */ }
 
             return Ok(new { message = "Admin status updated successfully" });
         }
@@ -711,19 +696,16 @@ public class MiqaatController : BaseController
             await _miqaatService.MarkAttendanceBatch(miqaatId, request.Day, request.MemberIds);
 
             // Notify each member that attendance was marked + 2 points allocated
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await _notificationService.SendToUsersAsync(
-                        request.MemberIds,
-                        "Attendance Marked ✅",
-                        $"Your attendance has been marked for Day {request.Day}. +2 points allocated! Tap to view.",
-                        "miqaat",
-                        miqaatId.ToString());
-                }
-                catch { /* Don't fail attendance if notification fails */ }
-            });
+                await _notificationService.SendToUsersAsync(
+                    request.MemberIds,
+                    "Attendance Marked ✅",
+                    $"Your attendance has been marked for Day {request.Day}. +2 points allocated! Tap to view.",
+                    "miqaat",
+                    miqaatId.ToString());
+            }
+            catch { /* Don't fail attendance if notification fails */ }
 
             return Ok(new { message = "Attendance marked successfully" });
         }

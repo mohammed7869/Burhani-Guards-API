@@ -44,28 +44,25 @@ public class QardanHasanaController : BaseController
             var response = await _service.Create(request, CurrentUser);
 
             // Notify both guarantors
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    var msg = $"{request.ApplicantName} has requested a Qardan of ₹{request.AmountRequested} and added you as a guarantor. Please review.";
-                    
-                    var guarantors = new List<int>();
-                    if (request.Guarantor1MemberId > 0) guarantors.Add(request.Guarantor1MemberId);
-                    if (request.GuarantorMemberId > 0) guarantors.Add(request.GuarantorMemberId);
+                var msg = $"{request.ApplicantName} has requested a Qardan of ₹{request.AmountRequested} and added you as a guarantor. Please review.";
+                
+                var guarantors = new List<int>();
+                if (request.Guarantor1MemberId > 0) guarantors.Add(request.Guarantor1MemberId);
+                if (request.GuarantorMemberId > 0) guarantors.Add(request.GuarantorMemberId);
 
-                    if (guarantors.Any())
-                    {
-                        await _notificationService.SendToUsersAsync(
-                            guarantors.Distinct(),
-                            "Qardan Guarantor Request",
-                            msg,
-                            "qardan",
-                            response.Id.ToString());
-                    }
+                if (guarantors.Any())
+                {
+                    await _notificationService.SendToUsersAsync(
+                        guarantors.Distinct(),
+                        "Qardan Guarantor Request",
+                        msg,
+                        "qardan",
+                        response.Id.ToString());
                 }
-                catch { /* Ignore notification error */ }
-            });
+            }
+            catch { /* Ignore notification error */ }
 
             return Ok(response);
         }
@@ -245,24 +242,37 @@ public class QardanHasanaController : BaseController
 
             await _service.Sanction(id, request, adminSignatureUrl, formImageUrl, CurrentUser.id);
 
-            // Notify Applicant
-            _ = Task.Run(async () =>
+            // Notify Applicant, Guarantors, and Captain
+            try
             {
-                try
+                var application = await _service.GetById(id);
+                if (application != null)
                 {
-                    var application = await _service.GetById(id);
-                    if (application != null && application.ApplicantMemberId > 0)
+                    var userIdsToNotify = new List<int>();
+                    
+                    if (application.ApplicantMemberId > 0) userIdsToNotify.Add(application.ApplicantMemberId);
+                    if (application.CaptainMemberId > 0) userIdsToNotify.Add(application.CaptainMemberId); // Guarantor 1
+                    if (application.GuarantorMemberId > 0) userIdsToNotify.Add(application.GuarantorMemberId); // Guarantor 2
+                    
+                    // Need to get Captain of the jamaat
+                    var captain = await _userRepository.GetCaptainByJamaatAsync(application.ApplicantJamaat ?? "");
+                    if (captain != null)
                     {
-                        await _notificationService.SendToUserAsync(
-                            application.ApplicantMemberId,
+                        userIdsToNotify.Add((int)captain.Id);
+                    }
+
+                    if (userIdsToNotify.Any())
+                    {
+                        await _notificationService.SendToUsersAsync(
+                            userIdsToNotify.Distinct(),
                             "Qardan Sanctioned",
-                            $"Your Qardan application has been sanctioned by Admin for ₹{request.SanctionedAmount}.",
+                            $"Qardan application for {application.ApplicantName} has been sanctioned by Admin for ₹{request.SanctionedAmount}.",
                             "qardan",
                             id.ToString());
                     }
                 }
-                catch { /* Ignore notification error */ }
-            });
+            }
+            catch { /* Ignore notification error */ }
 
             return Ok(new { message = "Application sanctioned successfully" });
         }
@@ -290,23 +300,20 @@ public class QardanHasanaController : BaseController
             await _service.Reject(id, request, CurrentUser.id);
 
             // Notify Applicant
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                var application = await _service.GetById(id);
+                if (application != null && application.ApplicantMemberId > 0)
                 {
-                    var application = await _service.GetById(id);
-                    if (application != null && application.ApplicantMemberId > 0)
-                    {
-                        await _notificationService.SendToUserAsync(
-                            application.ApplicantMemberId,
-                            "Qardan Rejected",
-                            $"Your Qardan application was rejected by Admin. Reason: {request.Reason}",
-                            "qardan",
-                            id.ToString());
-                    }
+                    await _notificationService.SendToUserAsync(
+                        application.ApplicantMemberId,
+                        "Qardan Rejected",
+                        $"Your Qardan application was rejected by Admin. Reason: {request.Reason}",
+                        "qardan",
+                        id.ToString());
                 }
-                catch { /* Ignore notification error */ }
-            });
+            }
+            catch { /* Ignore notification error */ }
 
             return Ok(new { message = "Application rejected" });
         }
@@ -400,38 +407,43 @@ public class QardanHasanaController : BaseController
             await _service.GuarantorApprove(id, CurrentUser.id);
 
             // Notify Applicant
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                var application = await _service.GetById(id);
+                if (application != null && application.ApplicantMemberId > 0)
                 {
-                    var application = await _service.GetById(id);
-                    if (application != null && application.ApplicantMemberId > 0)
+                    await _notificationService.SendToUserAsync(
+                        application.ApplicantMemberId,
+                        "Guarantor Approved",
+                        $"Your guarantor {CurrentUser.fullName} has approved your Qardan application.",
+                        "qardan",
+                        id.ToString());
+                        
+                    // If both guarantors have approved, notify Resource Admins and Applicant
+                    if (application.CaptainApproved && application.GuarantorApproved)
                     {
+                        var adminIds = await _userRepository.GetAdminUserIdsAsync();
+                        if (adminIds.Any())
+                        {
+                            await _notificationService.SendToUsersAsync(
+                                adminIds,
+                                "Qardan Ready for Sanction",
+                                $"{application.ApplicantName}'s application ({application.ApplicationNo}) has been approved by all guarantors and is ready for sanctioning.",
+                                "qardan",
+                                id.ToString());
+                        }
+
+                        // Notify Applicant that both have approved
                         await _notificationService.SendToUserAsync(
                             application.ApplicantMemberId,
-                            "Guarantor Approved",
-                            $"Your guarantor {CurrentUser.fullName} has approved your Qardan application.",
+                            "Qardan Ready for Sanction",
+                            "Both your guarantors have approved your Qardan application. It is now ready for sanctioning.",
                             "qardan",
                             id.ToString());
-                            
-                        // If both guarantors have approved, notify Resource Admins
-                        if (application.CaptainApproved && application.GuarantorApproved)
-                        {
-                            var adminIds = await _userRepository.GetAdminUserIdsAsync();
-                            if (adminIds.Any())
-                            {
-                                await _notificationService.SendToUsersAsync(
-                                    adminIds,
-                                    "Qardan Ready for Sanction",
-                                    $"{application.ApplicantName}'s application ({application.ApplicationNo}) has been approved by all guarantors and is ready for sanctioning.",
-                                    "qardan",
-                                    id.ToString());
-                            }
-                        }
                     }
                 }
-                catch { /* Ignore notification error */ }
-            });
+            }
+            catch { /* Ignore notification error */ }
 
             return Ok(new { message = "Application approved successfully." });
         }
@@ -474,23 +486,20 @@ public class QardanHasanaController : BaseController
             await _service.GuarantorReject(id, CurrentUser.id, request.Reason);
 
             // Notify Applicant
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                var application = await _service.GetById(id);
+                if (application != null && application.ApplicantMemberId > 0)
                 {
-                    var application = await _service.GetById(id);
-                    if (application != null && application.ApplicantMemberId > 0)
-                    {
-                        await _notificationService.SendToUserAsync(
-                            application.ApplicantMemberId,
-                            "Guarantor Rejected",
-                            $"Your Qardan application was rejected by a guarantor. Reason: {request.Reason}",
-                            "qardan",
-                            id.ToString());
-                    }
+                    await _notificationService.SendToUserAsync(
+                        application.ApplicantMemberId,
+                        "Guarantor Rejected",
+                        $"Your Qardan application was rejected by a guarantor. Reason: {request.Reason}",
+                        "qardan",
+                        id.ToString());
                 }
-                catch { /* Ignore notification error */ }
-            });
+            }
+            catch { /* Ignore notification error */ }
 
             return Ok(new { message = "Application rejected by guarantor." });
         }
@@ -581,23 +590,20 @@ public class QardanHasanaController : BaseController
             var response = await _repaymentService.RecordRepayment(id, request, receiptImageUrl, CurrentUser);
 
             // Notify Applicant
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                var application = await _service.GetById(id);
+                if (application != null && application.ApplicantMemberId > 0)
                 {
-                    var application = await _service.GetById(id);
-                    if (application != null && application.ApplicantMemberId > 0)
-                    {
-                        await _notificationService.SendToUserAsync(
-                            application.ApplicantMemberId,
-                            "Repayment Recorded",
-                            $"A repayment of ₹{request.AmountPaid} has been recorded for your Qardan.",
-                            "qardan",
-                            id.ToString());
-                    }
+                    await _notificationService.SendToUserAsync(
+                        application.ApplicantMemberId,
+                        "Repayment Recorded",
+                        $"A repayment of ₹{request.AmountPaid} has been recorded for your Qardan.",
+                        "qardan",
+                        id.ToString());
                 }
-                catch { /* Ignore notification error */ }
-            });
+            }
+            catch { /* Ignore notification error */ }
 
             return Ok(response);
         }
