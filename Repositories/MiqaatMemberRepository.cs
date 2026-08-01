@@ -204,6 +204,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`admin_approval` AS AdminApproval,
                 m.`captain_name` AS CaptainName,
                 m.`is_admin_created` AS IsAdminCreated,
+                m.`is_enrollment_stopped` AS IsEnrollmentStopped,
                 m.`created_at` AS CreatedAt,
                 m.`updated_at` AS UpdatedAt,
                 mm.`MemberStatus` AS MemberStatus,

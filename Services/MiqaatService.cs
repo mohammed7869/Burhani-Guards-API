@@ -371,6 +371,7 @@ public class MiqaatService : IMiqaatService
         existingMiqaat.MiqaatDays = CalculateMiqaatDaysInclusive(request.FromDate, request.TillDate);
         existingMiqaat.VolunteerLimit = request.VolunteerLimit;
         existingMiqaat.AboutMiqaat = request.AboutMiqaat;
+        existingMiqaat.IsEnrollmentStopped = request.IsEnrollmentStopped ?? existingMiqaat.IsEnrollmentStopped;
         
         // Update approval status if provided
         AdminApprovalStatus? newApprovalStatus = null;
@@ -691,7 +692,8 @@ public class MiqaatService : IMiqaatService
             null,
             false,
             m.IsAdminCreated,
-            null
+            null,
+            m.IsEnrollmentStopped
         )).ToList();
     }
 
@@ -1418,7 +1420,7 @@ public class MiqaatService : IMiqaatService
             m.Id,
             m.MiqaatName,
             m.MiqaatType,
-            null, // m.Jamaat (Set to null to prevent displaying in mobile app popup)
+           m.Jamaat, 
             m.Jamiyat,
             m.FromDate,
             m.TillDate,
@@ -1438,7 +1440,8 @@ public class MiqaatService : IMiqaatService
             includeReport ? m.KhidmatDone : null,
             includeReport && m.IsReportSubmitted,
             m.IsAdminCreated,
-            m.NotificationImage
+            m.NotificationImage,
+            m.IsEnrollmentStopped
         );
     }
 

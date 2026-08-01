@@ -24,6 +24,7 @@ public sealed record MiqaatResponse(
     string? KhidmatDone,
     bool IsReportSubmitted,
     bool IsAdminCreated,
-    string? NotificationImage
+    string? NotificationImage,
+    bool IsEnrollmentStopped
 );
 

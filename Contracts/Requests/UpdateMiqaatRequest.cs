@@ -9,6 +9,7 @@ public sealed record UpdateMiqaatRequest(
     DateTime TillDate,
     int VolunteerLimit,
     string? AboutMiqaat,
-    string? AdminApproval = null
+    string? AdminApproval = null,
+    bool? IsEnrollmentStopped = null
 );
 

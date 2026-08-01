@@ -34,5 +34,6 @@ public class MiqaatModel : BaseModel
     public string? KhidmatDone { get; set; }
     public bool IsReportSubmitted { get; set; }
     public bool IsAdminCreated { get; set; }
+    public bool IsEnrollmentStopped { get; set; }
 }
 

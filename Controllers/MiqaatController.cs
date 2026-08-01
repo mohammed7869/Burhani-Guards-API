@@ -339,6 +339,12 @@ public class MiqaatController : BaseController
 
         try
         {
+            var miqaat = await _miqaatService.GetById(miqaatId);
+            if (miqaat != null && miqaat.IsEnrollmentStopped)
+            {
+                return BadRequest(new { message = "Enrollment for this have been stopped." });
+            }
+
             var days = request.Days?
                 .Where(d => d > 0)
                 .Distinct()
@@ -356,7 +362,6 @@ public class MiqaatController : BaseController
             {
                 try
                 {
-                    var miqaat = await _miqaatService.GetById(miqaatId);
                     if (miqaat != null)
                     {
                         var captain = await _userRepo.GetCaptainByJamaatAsync(CurrentUser.jamaat ?? "");
