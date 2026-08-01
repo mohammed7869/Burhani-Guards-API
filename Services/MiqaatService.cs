@@ -1418,7 +1418,7 @@ public class MiqaatService : IMiqaatService
             m.Id,
             m.MiqaatName,
             m.MiqaatType,
-            m.Jamaat,
+            null, // m.Jamaat (Set to null to prevent displaying in mobile app popup)
             m.Jamiyat,
             m.FromDate,
             m.TillDate,
