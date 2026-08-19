@@ -19,10 +19,14 @@ using MySqlMemberSnapshotRepository = BurhaniGuards.Api.Repositories.MySql.Membe
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Kestrel to listen on all interfaces (0.0.0.0) for network access
-builder.WebHost.ConfigureKestrel(options =>
+// We only apply this in Production to prevent local port conflicts
+if (!builder.Environment.IsDevelopment())
 {
-    options.ListenAnyIP(5000); // Listen on all network interfaces on port 5000
-});
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.ListenAnyIP(5000); // Listen on all network interfaces on port 5000
+    });
+}
 
 // Configure JSON options to use camelCase
 builder.Services.ConfigureHttpJsonOptions(options =>

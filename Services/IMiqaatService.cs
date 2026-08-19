@@ -25,6 +25,7 @@ public interface IMiqaatService
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days);
     Task UpdateAdminStatus(int memberId, long miqaatId, string adminStatus, IReadOnlyCollection<int>? days);
     Task<List<EnrolledMemberResponse>> GetCaptainApprovedMembersForIntlMiqaat(long miqaatId, int? day = null);
+    Task<List<EnrolledMemberResponse>> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     AttendanceWindowInfo GetAttendanceWindowInfo(long miqaatId, DateTime fromDate, DateTime tillDate, int miqaatDays, int day);
     Task<MemberMiqaatAttendanceHistoryResponse> GetMemberAttendanceHistory(int memberId);
@@ -35,5 +36,6 @@ public interface IMiqaatService
     Task<MiqaatDetailedInsightsResponse> GetMiqaatDetailedInsights(long miqaatId);
     Task<List<MemberTrackingRowResponse>> GetMemberDayTrackingAsync(long miqaatId);
     Task ResendMiqaatEmail(long miqaatId);
+    Task<int> AdminEnrollMembers(long miqaatId, List<int> memberIds, IReadOnlyCollection<int>? days);
 }
 

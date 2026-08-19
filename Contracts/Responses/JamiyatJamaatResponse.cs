@@ -6,12 +6,15 @@ public sealed record JamiyatJamaatResponse(
 );
 
 public sealed record JamiyatItem(
+    int Id,
     string Name,
     int Count
 );
 
 public sealed record JamaatItem(
+    int Id,
     string Name,
-    int Count
+    int Count,
+    int JamiyatId
 );
 

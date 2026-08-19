@@ -86,6 +86,39 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpPost("{miqaatId:long}/admin-enroll")]
+    public async Task<IActionResult> AdminEnrollMembers(long miqaatId, [FromBody] AdminEnrollRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Only Admin (role 7) can bulk-enroll members
+        if (CurrentUser.roles != 7)
+        {
+            return Forbid("Only Admin can enroll members on their behalf");
+        }
+
+        try
+        {
+            var memberIds = request.MemberIds.Distinct().ToList();
+
+            var days = request.Days?
+                .Where(d => d > 0)
+                .Distinct()
+                .ToList();
+
+            var enrolled = await _miqaatService.AdminEnrollMembers(miqaatId, memberIds, days);
+
+            return Ok(new { message = $"{enrolled} member(s) enrolled successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -454,18 +487,14 @@ public class MiqaatController : BaseController
             return NotFound(new { message = "Miqaat not found" });
         }
 
-        if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
+        // Admin (role 7) has full access to all miqaat types
+        if (CurrentUser.roles != 7)
         {
-            // Only Admin can view attendance for International / multi-jamaat Local miqaats
-            if (CurrentUser.roles != 7)
+            if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
             {
                 return Forbid("Only Admin can view approved members for attendance on this miqaat");
             }
-        }
-        else
-        {
-            // Only Captains can view attendance for single-jamaat Local miqaats
-            if (CurrentUser.roles != 2)
+            else if (CurrentUser.roles != 2)
             {
                 return Forbid("Only Captains can view approved members for attendance");
             }
@@ -516,10 +545,10 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can update final status
-        if (CurrentUser.roles != 2)
+        // Captains and Admin can update final status
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 7)
         {
-            return Forbid("Only Captains can update final status");
+            return Forbid("Only Captains or Admin can update final status");
         }
 
         try
@@ -639,6 +668,28 @@ public class MiqaatController : BaseController
         }
     }
 
+    /// <summary>
+    /// Get self-enrolled members pending captain review for International miqaats
+    /// </summary>
+    [HttpGet("{miqaatId:long}/captain-pending-members")]
+    public async Task<IActionResult> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, [FromQuery] int? day = null)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var members = await _miqaatService.GetCaptainPendingMembersForIntlMiqaat(miqaatId, day);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("{miqaatId:long}/member/{memberId:int}/enrollment-days")]
     public async Task<IActionResult> GetMemberEnrollmentDays(long miqaatId, int memberId)
     {
@@ -679,18 +730,14 @@ public class MiqaatController : BaseController
             return NotFound(new { message = "Miqaat not found" });
         }
 
-        if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
+        // Admin (role 7) has full access to mark attendance for all miqaat types
+        if (CurrentUser.roles != 7)
         {
-            // Only Admin can mark attendance for International / multi-jamaat Local miqaats
-            if (CurrentUser.roles != 7)
+            if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
             {
                 return Forbid("Only Admin can mark attendance for this miqaat");
             }
-        }
-        else
-        {
-            // Only Captains can mark attendance for single-jamaat Local miqaats
-            if (CurrentUser.roles != 2)
+            else if (CurrentUser.roles != 2)
             {
                 return Forbid("Only Captains can mark attendance");
             }

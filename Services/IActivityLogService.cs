@@ -20,11 +20,11 @@ public interface IActivityLogService
     Task LogMemberEnrollmentChangedAsync(long miqaatId, int memberId, string memberName, string performedBy, int? performedById, string performerRole, string oldStatus, string newStatus, IReadOnlyCollection<int>? days);
 
     // Captain actions
-    Task LogCaptainFinalStatusAsync(long miqaatId, int memberId, string memberName, string captainName, int? captainId, string finalStatus, IReadOnlyCollection<int>? days);
+    Task LogCaptainFinalStatusAsync(long miqaatId, int memberId, string memberName, string performedBy, int? performedById, string performerRole, string finalStatus, IReadOnlyCollection<int>? days);
 
     // Attendance
-    Task LogAttendanceMarkedAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string captainName, int? captainId);
-    Task LogAttendanceMarkedWithDetailsAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string captainName, int? captainId, List<object> memberDetails);
+    Task LogAttendanceMarkedAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string performedBy, int? performedById, string performerRole);
+    Task LogAttendanceMarkedWithDetailsAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string performedBy, int? performedById, string performerRole, List<object> memberDetails);
 
     // Member management
     Task LogMemberCreatedAsync(int memberId, string memberName, string itsId, string? createdBy, int? createdById, string creatorRole);

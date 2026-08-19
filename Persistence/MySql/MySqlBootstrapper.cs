@@ -362,6 +362,22 @@ public sealed class MySqlBootstrapper
         }
         catch { } // Column might already exist
 
+        // Migration: Restore member enrollment statuses that were accidentally reset based on activity_logs
+        try
+        {
+            await dbConnection.ExecuteAsync("""
+                UPDATE `miqaat_members` mm
+                INNER JOIN `activity_logs` al 
+                    ON al.`miqaat_id` = mm.`miqaat_id` 
+                    AND al.`target_member_id` = mm.`member_id` 
+                    AND al.`action` = 'MEMBER_ENROLLED'
+                    AND al.`new_value` = 'Approved'
+                SET mm.`status` = 'Approved'
+                WHERE mm.`status` = 'Pending';
+                """);
+        }
+        catch { }
+
         // Seed default captain if not exists
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(CaptainDefaults.Password);
         await dbConnection.ExecuteAsync("""

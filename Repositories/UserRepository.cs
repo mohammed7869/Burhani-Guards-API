@@ -244,7 +244,6 @@ public class UserRepository : IUserRepository
                 u.`created_at` AS createdAt,
                 u.`updated_at` AS updatedAt
             FROM `members` u
-            WHERE u.`is_active` = 1
             ORDER BY u.`created_at` DESC
         ";
 
@@ -522,6 +521,7 @@ public class UserRepository : IUserRepository
             // Get distinct jamiyat with counts
             var jamiyatSql = @"
                 SELECT 
+                    MAX(jamiyat_id) AS Id,
                     jamiyat AS Name,
                     COUNT(*) AS Count
                 FROM `members`
@@ -532,14 +532,16 @@ public class UserRepository : IUserRepository
                 ORDER BY `jamiyat`
             ";
 
-            var jamiyatResults = await connection.QueryAsync<(string Name, long Count)>(jamiyatSql);
-            var jamiyatList = jamiyatResults.Select(x => new JamiyatItem(x.Name, (int)x.Count)).ToList();
+            var jamiyatResults = await connection.QueryAsync<(int Id, string Name, long Count)>(jamiyatSql);
+            var jamiyatList = jamiyatResults.Select(x => new JamiyatItem(x.Id, x.Name, (int)x.Count)).ToList();
 
             // Get distinct jamaat with counts
             var jamaatSql = @"
                 SELECT 
+                    MAX(jamaat_id) AS Id,
                     jamaat AS Name,
-                    COUNT(*) AS Count
+                    COUNT(*) AS Count,
+                    MAX(jamiyat_id) AS JamiyatId
                 FROM `members`
                 WHERE `is_active` = 1 
                     AND `jamaat` IS NOT NULL 
@@ -548,8 +550,8 @@ public class UserRepository : IUserRepository
                 ORDER BY `jamaat`
             ";
 
-            var jamaatResults = await connection.QueryAsync<(string Name, long Count)>(jamaatSql);
-            var jamaatList = jamaatResults.Select(x => new JamaatItem(x.Name, (int)x.Count)).ToList();
+            var jamaatResults = await connection.QueryAsync<(int Id, string Name, long Count, int JamiyatId)>(jamaatSql);
+            var jamaatList = jamaatResults.Select(x => new JamaatItem(x.Id, x.Name, (int)x.Count, x.JamiyatId)).ToList();
 
             return (jamiyatList, jamaatList);
         }

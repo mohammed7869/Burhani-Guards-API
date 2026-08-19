@@ -22,6 +22,7 @@ public interface IMiqaatMemberRepository
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days);
     Task UpdateAdminStatus(int memberId, long miqaatId, string adminStatus, IReadOnlyCollection<int>? days);
     Task<List<MemberModel>> GetCaptainApprovedMembersForIntlMiqaat(long miqaatId, int? day = null);
+    Task<List<MemberModel>> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
     Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId);
     Task<List<MemberEnrollmentDayModel>> GetMemberEnrollmentDays(long miqaatId, int memberId);
@@ -90,9 +91,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         }
 
         const string insertSql = """
-            INSERT INTO `miqaat_members` (`member_id`, `miqaat_id`, `miqaat_day`, `status`)
-            VALUES (@MemberId, @MiqaatId, @Day, @Status)
-            ON DUPLICATE KEY UPDATE `status` = VALUES(`status`);
+            INSERT IGNORE INTO `miqaat_members` (`member_id`, `miqaat_id`, `miqaat_day`, `status`)
+            VALUES (@MemberId, @MiqaatId, @Day, @Status);
         """;
 
         var parameters = memberIds
@@ -395,7 +395,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             FROM `members` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
             WHERE mm.`miqaat_id` = @MiqaatId 
-                AND mm.`status` = 'Approved'
+                AND mm.`status` IN ('Approved', 'Enrolled')
                 AND m.`is_active` = 1
             ORDER BY m.`full_name` ASC
         """;
@@ -463,7 +463,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`is_active` AS IsActive,
                 m.`created_at` AS CreatedAt,
                 m.`updated_at` AS UpdatedAt,
-                SUM(CASE WHEN mm.`status` = 'Approved' THEN 1 ELSE 0 END) AS ApprovedCount,
+                SUM(CASE WHEN mm.`status` IN ('Approved', 'Enrolled') THEN 1 ELSE 0 END) AS ApprovedCount,
                 SUM(CASE WHEN mm.`status` = 'Rejected' THEN 1 ELSE 0 END) AS RejectedCount,
                 SUM(CASE WHEN mm.`status` = 'Pending' THEN 1 ELSE 0 END) AS PendingCount,
                 COUNT(*) AS TotalDays
@@ -830,6 +830,107 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         else
         {
             // No day filter: return distinct members (backward compatible)
+            var seen = new HashSet<long>();
+            foreach (var row in result)
+            {
+                var id = (long)row.Id;
+                if (!seen.Add(id)) continue;
+
+                members.Add(new MemberModel
+                {
+                    Id = id,
+                    Profile = row.Profile as string,
+                    ItsId = row.ItsId as string ?? string.Empty,
+                    Rank = row.Rank as string ?? string.Empty,
+                    Roles = row.Roles as int?,
+                    Jamiyat = row.Jamiyat as string,
+                    Jamaat = row.Jamaat as string,
+                    FullName = row.FullName as string ?? string.Empty,
+                    Gender = row.Gender as string,
+                    Email = row.Email as string ?? string.Empty,
+                    Age = row.Age as int?,
+                    Contact = row.Contact as string,
+                    IsActive = row.IsActive as bool? ?? true,
+                    AdminStatus = row.AdminStatus as string
+                });
+            }
+        }
+        
+        return members;
+    }
+
+    public async Task<List<MemberModel>> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, int? day = null)
+    {
+        using var connection = _context.CreateConnection();
+
+        var sql = $@"
+            SELECT 
+                m.`id` AS Id,
+                m.`profile` AS Profile,
+                m.`its_id` AS ItsId,
+                m.`rank` AS `Rank`,
+                m.`roles` AS Roles,
+                m.`jamiyat` AS Jamiyat,
+                m.`jamaat` AS Jamaat,
+                m.`full_name` AS FullName,
+                m.`gender` AS Gender,
+                m.`email` AS Email,
+                m.`age` AS Age,
+                m.`contact` AS Contact,
+                m.`is_active` AS IsActive,
+                mm.`admin_status` AS AdminStatus,
+                mm.`miqaat_day` AS MiqaatDay,
+                mm.`is_attended` AS IsAttended
+            FROM `members` m
+            INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
+            INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
+            WHERE mm.`miqaat_id` = @MiqaatId
+                AND (lm.`miqaat_type` = 'International' OR lm.`is_admin_created` = 1)
+                AND mm.`status` = 'Approved'
+                AND (mm.`final_status` = 'Pending' OR mm.`final_status` IS NULL OR mm.`final_status` = '')
+                AND m.`is_active` = 1
+                {(day.HasValue ? "AND mm.`miqaat_day` = @Day" : "")}
+            ORDER BY m.`full_name` ASC
+        ";
+
+        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId, Day = day ?? 0 });
+        var members = new List<MemberModel>();
+
+        if (day.HasValue)
+        {
+            foreach (var row in result)
+            {
+                var isAttended = false;
+                if (row.IsAttended != null)
+                {
+                    if (row.IsAttended is bool boolVal) isAttended = boolVal;
+                    else if (row.IsAttended is int intVal) isAttended = intVal != 0;
+                    else if (row.IsAttended is byte byteVal) isAttended = byteVal != 0;
+                    else isAttended = Convert.ToBoolean(row.IsAttended);
+                }
+
+                members.Add(new MemberModel
+                {
+                    Id = (long)row.Id,
+                    Profile = row.Profile as string,
+                    ItsId = row.ItsId as string ?? string.Empty,
+                    Rank = row.Rank as string ?? string.Empty,
+                    Roles = row.Roles as int?,
+                    Jamiyat = row.Jamiyat as string,
+                    Jamaat = row.Jamaat as string,
+                    FullName = row.FullName as string ?? string.Empty,
+                    Gender = row.Gender as string,
+                    Email = row.Email as string ?? string.Empty,
+                    Age = row.Age as int?,
+                    Contact = row.Contact as string,
+                    IsActive = row.IsActive as bool? ?? true,
+                    AdminStatus = row.AdminStatus as string,
+                    IsAttended = isAttended
+                });
+            }
+        }
+        else
+        {
             var seen = new HashSet<long>();
             foreach (var row in result)
             {

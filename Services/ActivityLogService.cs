@@ -176,7 +176,7 @@ public class ActivityLogService : IActivityLogService
 
     // ─── Captain Actions ──────────────────────────────────────────────────
 
-    public async Task LogCaptainFinalStatusAsync(long miqaatId, int memberId, string memberName, string captainName, int? captainId, string finalStatus, IReadOnlyCollection<int>? days)
+    public async Task LogCaptainFinalStatusAsync(long miqaatId, int memberId, string memberName, string performedBy, int? performedById, string performerRole, string finalStatus, IReadOnlyCollection<int>? days)
     {
         var action = finalStatus == "Approved" 
             ? ActivityAction.CaptainApprovedMember 
@@ -187,9 +187,9 @@ public class ActivityLogService : IActivityLogService
             EntityType = ActivityEntityType.MiqaatMember,
             EntityId = memberId,
             Action = action,
-            PerformedBy = captainName,
-            PerformedById = captainId,
-            PerformedByRole = "Captain",
+            PerformedBy = performedBy,
+            PerformedById = performedById,
+            PerformedByRole = performerRole,
             TargetMemberId = memberId,
             TargetMemberName = memberName,
             MiqaatId = miqaatId,
@@ -203,16 +203,16 @@ public class ActivityLogService : IActivityLogService
 
     // ─── Attendance ───────────────────────────────────────────────────────
 
-    public async Task LogAttendanceMarkedAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string captainName, int? captainId)
+    public async Task LogAttendanceMarkedAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string performedBy, int? performedById, string performerRole)
     {
         await LogAsync(new ActivityLogModel
         {
             EntityType = ActivityEntityType.MiqaatMember,
             EntityId = miqaatId,
             Action = ActivityAction.AttendanceMarked,
-            PerformedBy = captainName,
-            PerformedById = captainId,
-            PerformedByRole = "Captain",
+            PerformedBy = performedBy,
+            PerformedById = performedById,
+            PerformedByRole = performerRole,
             MiqaatId = miqaatId,
             MiqaatDay = day,
             Details = JsonSerializer.Serialize(new { miqaatName, day, memberCount = memberIds.Count, memberIds }),
@@ -220,16 +220,16 @@ public class ActivityLogService : IActivityLogService
         });
     }
 
-    public async Task LogAttendanceMarkedWithDetailsAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string captainName, int? captainId, List<object> memberDetails)
+    public async Task LogAttendanceMarkedWithDetailsAsync(long miqaatId, string miqaatName, int day, List<int> memberIds, string performedBy, int? performedById, string performerRole, List<object> memberDetails)
     {
         await LogAsync(new ActivityLogModel
         {
             EntityType = ActivityEntityType.MiqaatMember,
             EntityId = miqaatId,
             Action = ActivityAction.AttendanceMarked,
-            PerformedBy = captainName,
-            PerformedById = captainId,
-            PerformedByRole = "Captain",
+            PerformedBy = performedBy,
+            PerformedById = performedById,
+            PerformedByRole = performerRole,
             MiqaatId = miqaatId,
             MiqaatDay = day,
             Details = JsonSerializer.Serialize(new { miqaatName, day, memberCount = memberIds.Count, members = memberDetails }),

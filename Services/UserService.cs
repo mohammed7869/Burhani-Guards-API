@@ -105,7 +105,15 @@ public class UserService : IUserService
     public async Task Delete(int id)
     {
         var currentUser = GetCurrentUser();
+        
+        // Fetch member name before deletion for the audit log
+        var memberToDelete = await _userRepository.SelectUser(id);
+
         await _userRepository.Delete(id, currentUser);
+
+        // Log member deletion (deactivation)
+        var performerRole = currentUser?.roles == MemberRank.ResourceAdmin ? "Admin" : "Captain";
+        _ = _activityLogService.LogMemberDeactivatedAsync(id, memberToDelete.FullName, currentUser?.fullName ?? "Unknown", currentUser?.id, performerRole);
     }
 
     public async Task Edit(UserEditViewModel viewmodel)

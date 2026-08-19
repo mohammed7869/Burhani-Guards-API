@@ -114,6 +114,7 @@ public class MiqaatService : IMiqaatService
         // Send email notifications when Captain creates Miqaat
         _ = Task.Run(async () =>
         {
+            return; // Disabled per user request
             try
             {
                 var adminEmails = await _userRepository.GetAdminEmailsAsync();
@@ -250,6 +251,7 @@ public class MiqaatService : IMiqaatService
         // Send email notifications
         _ = Task.Run(async () =>
         {
+            return; // Disabled per user request
             try
             {
                 var typeLabel = miqaatType == "International" ? "International" : "Local";
@@ -763,20 +765,17 @@ public class MiqaatService : IMiqaatService
         await _miqaatMemberRepository.UpdateMemberMiqaatStatus(memberId, miqaatId, status, days);
 
         // Log enrollment change (member self-enrollment) - resolve member name
-        _ = Task.Run(async () =>
+        try
         {
-            try
-            {
-                var member = await _userRepository.SelectUser(memberId);
-                var memberName = member?.FullName ?? $"Member #{memberId}";
-                var itsId = member?.ItsId ?? "";
-                await _activityLogService.LogMemberEnrollmentChangedAsync(miqaatId, memberId, $"{memberName} (ITS: {itsId})", memberName, memberId, "Member", "", status, days);
-            }
-            catch
-            {
-                await _activityLogService.LogMemberEnrollmentChangedAsync(miqaatId, memberId, $"Member #{memberId}", "Member", memberId, "Member", "", status, days);
-            }
-        });
+            var member = await _userRepository.SelectUser(memberId);
+            var memberName = member?.FullName ?? $"Member #{memberId}";
+            var itsId = member?.ItsId ?? "";
+            await _activityLogService.LogMemberEnrollmentChangedAsync(miqaatId, memberId, $"{memberName} (ITS: {itsId})", memberName, memberId, "Member", "", status, days);
+        }
+        catch
+        {
+            await _activityLogService.LogMemberEnrollmentChangedAsync(miqaatId, memberId, $"Member #{memberId}", "Member", memberId, "Member", "", status, days);
+        }
 
         // Email notification: Notify Captain (Local) or Admin (International) about enrollment change
         _ = Task.Run(async () =>
@@ -847,6 +846,16 @@ public class MiqaatService : IMiqaatService
             m.FullName,
             m.ItsId,
             m.TotalPoints
+        )).ToList();
+    }
+
+    public async Task<List<EnrolledMemberResponse>> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, int? day = null)
+    {
+        var members = await _miqaatMemberRepository.GetCaptainPendingMembersForIntlMiqaat(miqaatId, day);
+        
+        return members.Select(m => new EnrolledMemberResponse(
+            m.Id, m.FullName, m.Email, m.Contact, m.Rank, m.Jamaat, m.Jamiyat,
+            null, m.ItsId, m.IsAttended, "Pending", m.AdminStatus
         )).ToList();
     }
 
@@ -1030,22 +1039,24 @@ public class MiqaatService : IMiqaatService
 
         await _miqaatMemberRepository.UpdateFinalStatus(memberId, miqaatId, finalStatus, days);
 
-        // Log captain final status action - resolve member and captain names
-        _ = Task.Run(async () =>
+        // Capture current user
+        var currentUser = GetCurrentUser();
+
+        // Log final status action - resolve member and performer names
+        var performerName = currentUser?.fullName ?? "Admin/Captain";
+        var performerRole = currentUser?.roles == 7 ? "Admin" : "Captain";
+        var performerId = currentUser?.id;
+
+        try
         {
-            try
-            {
-                var member = await _userRepository.SelectUser(memberId);
-                var memberName = member != null ? $"{member.FullName} (ITS: {member.ItsId})" : $"Member #{memberId}";
-                var miqaat = await _miqaatRepository.GetById(miqaatId);
-                var captainName = miqaat?.CaptainName ?? "Captain";
-                await _activityLogService.LogCaptainFinalStatusAsync(miqaatId, memberId, memberName, captainName, null, finalStatus, days);
-            }
-            catch
-            {
-                await _activityLogService.LogCaptainFinalStatusAsync(miqaatId, memberId, $"Member #{memberId}", "Captain", null, finalStatus, days);
-            }
-        });
+            var member = await _userRepository.SelectUser(memberId);
+            var memberName = member != null ? $"{member.FullName} (ITS: {member.ItsId})" : $"Member #{memberId}";
+            await _activityLogService.LogCaptainFinalStatusAsync(miqaatId, memberId, memberName, performerName, performerId, performerRole, finalStatus, days);
+        }
+        catch
+        {
+            await _activityLogService.LogCaptainFinalStatusAsync(miqaatId, memberId, $"Member #{memberId}", performerName, performerId, performerRole, finalStatus, days);
+        }
 
         // Email notification: Notify the member about captain's decision
         _ = Task.Run(async () =>
@@ -1095,32 +1106,29 @@ public class MiqaatService : IMiqaatService
         var adminUser = GetCurrentUser();
 
         // Log admin status change
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            var member = await _userRepository.SelectUser(memberId);
+            var memberName = member != null ? $"{member.FullName} (ITS: {member.ItsId})" : $"Member #{memberId}";
+            var miqaat = await _miqaatRepository.GetById(miqaatId);
+            var action = adminStatus == "Approved" ? "ADMIN_APPROVED_INTL_MEMBER" : "ADMIN_REJECTED_INTL_MEMBER";
+            await _activityLogService.LogAsync(new BurhaniGuards.Api.BusinessModel.ActivityLogModel
             {
-                var member = await _userRepository.SelectUser(memberId);
-                var memberName = member != null ? $"{member.FullName} (ITS: {member.ItsId})" : $"Member #{memberId}";
-                var miqaat = await _miqaatRepository.GetById(miqaatId);
-                var action = adminStatus == "Approved" ? "ADMIN_APPROVED_INTL_MEMBER" : "ADMIN_REJECTED_INTL_MEMBER";
-                await _activityLogService.LogAsync(new BurhaniGuards.Api.BusinessModel.ActivityLogModel
-                {
-                    EntityType = BurhaniGuards.Api.BusinessModel.ActivityEntityType.MiqaatMember,
-                    EntityId = memberId,
-                    Action = action,
-                    PerformedBy = adminUser?.fullName ?? "Admin",
-                    PerformedById = adminUser?.id,
-                    PerformedByRole = "Admin",
-                    TargetMemberId = memberId,
-                    TargetMemberName = memberName,
-                    MiqaatId = miqaatId,
-                    NewValue = adminStatus,
-                    Details = System.Text.Json.JsonSerializer.Serialize(new { miqaatName = miqaat?.MiqaatName, memberName }),
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
-            catch { }
-        });
+                EntityType = BurhaniGuards.Api.BusinessModel.ActivityEntityType.MiqaatMember,
+                EntityId = memberId,
+                Action = action,
+                PerformedBy = adminUser?.fullName ?? "Admin",
+                PerformedById = adminUser?.id,
+                PerformedByRole = "Admin",
+                TargetMemberId = memberId,
+                TargetMemberName = memberName,
+                MiqaatId = miqaatId,
+                NewValue = adminStatus,
+                Details = System.Text.Json.JsonSerializer.Serialize(new { miqaatName = miqaat?.MiqaatName, memberName }),
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+        catch { }
 
         // Email notification: Notify the member + captain about admin's decision for International miqaat
         _ = Task.Run(async () =>
@@ -1255,31 +1263,35 @@ public class MiqaatService : IMiqaatService
 
         await _miqaatMemberRepository.MarkAttendanceBatch(miqaatId, day, memberIds);
 
+        // Capture current user before Task.Run
+        var currentUser = GetCurrentUser();
+
         // Log attendance marking - resolve member names and ITS IDs
-        _ = Task.Run(async () =>
+        var performerName = currentUser?.fullName ?? miqaat.CaptainName;
+        var performerRole = currentUser?.roles == 7 ? "Admin" : "Captain";
+        var performerId = currentUser?.id;
+
+        try
         {
-            try
+            var memberDetails = new List<object>();
+            foreach (var mid in memberIds)
             {
-                var memberDetails = new List<object>();
-                foreach (var mid in memberIds)
+                try
                 {
-                    try
-                    {
-                        var m = await _userRepository.SelectUser(mid);
-                        memberDetails.Add(new { id = mid, name = m?.FullName ?? "", itsId = m?.ItsId ?? "" });
-                    }
-                    catch
-                    {
-                        memberDetails.Add(new { id = mid, name = "", itsId = "" });
-                    }
+                    var m = await _userRepository.SelectUser(mid);
+                    memberDetails.Add(new { id = mid, name = m?.FullName ?? "", itsId = m?.ItsId ?? "" });
                 }
-                await _activityLogService.LogAttendanceMarkedWithDetailsAsync(miqaatId, miqaat.MiqaatName, day, memberIds, miqaat.CaptainName, null, memberDetails);
+                catch
+                {
+                    memberDetails.Add(new { id = mid, name = "", itsId = "" });
+                }
             }
-            catch
-            {
-                await _activityLogService.LogAttendanceMarkedAsync(miqaatId, miqaat.MiqaatName, day, memberIds, miqaat.CaptainName, null);
-            }
-        });
+            await _activityLogService.LogAttendanceMarkedWithDetailsAsync(miqaatId, miqaat.MiqaatName, day, memberIds, performerName, performerId, performerRole, memberDetails);
+        }
+        catch
+        {
+            await _activityLogService.LogAttendanceMarkedAsync(miqaatId, miqaat.MiqaatName, day, memberIds, performerName, performerId, performerRole);
+        }
 
         // Email notification: Notify all members whose attendance was marked
         _ = Task.Run(async () =>
@@ -1608,6 +1620,62 @@ public class MiqaatService : IMiqaatService
             r.AdminStatus,
             r.IsAttended
         )).ToList();
+    }
+    public async Task<int> AdminEnrollMembers(long miqaatId, List<int> memberIds, IReadOnlyCollection<int>? days)
+    {
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            throw new Exception("Miqaat not found");
+        }
+
+        // Use UpsertSpecificMembersForMiqaat which does INSERT ... ON DUPLICATE KEY UPDATE
+        // This properly creates rows if they don't exist, or updates them if they do
+        await _miqaatMemberRepository.UpsertSpecificMembersForMiqaat(miqaatId, memberIds, AdminApprovalStatus.Approved);
+
+        // Capture current user 
+        var adminUser = GetCurrentUser();
+        var adminName = adminUser?.fullName ?? "Admin";
+        var adminId = adminUser?.id;
+
+        // Log admin enrollment
+        foreach (var memberId in memberIds)
+        {
+            try
+            {
+                var member = await _userRepository.SelectUser(memberId);
+                var memberName = member?.FullName ?? $"Member #{memberId}";
+                var itsId = member?.ItsId ?? "";
+                
+                await _activityLogService.LogMemberEnrollmentChangedAsync(
+                    miqaatId, 
+                    memberId, 
+                    $"{memberName} (ITS: {itsId})", 
+                    adminName, 
+                    adminId, 
+                    "Admin", 
+                    "", 
+                    "Approved", 
+                    days
+                );
+            }
+            catch
+            {
+                await _activityLogService.LogMemberEnrollmentChangedAsync(
+                    miqaatId, 
+                    memberId, 
+                    $"Member #{memberId}", 
+                    adminName, 
+                    adminId, 
+                    "Admin", 
+                    "", 
+                    "Approved", 
+                    days
+                );
+            }
+        }
+
+        return memberIds.Count;
     }
 }
 
