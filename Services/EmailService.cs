@@ -24,9 +24,9 @@ public class EmailService : IEmailService
         var emailConfig = configuration.GetSection("Email");
         _smtpServer = emailConfig["SmtpServer"] ?? "smtp.gmail.com";
         _smtpPort = int.Parse(emailConfig["SmtpPort"] ?? "587");
-        _smtpUsername = emailConfig["SmtpUsername"] ?? "bgpoona.jamiat53@gmail.com";
-        _smtpPassword = emailConfig["SmtpPassword"] ?? "gwmzdeawkassevmv";
-        _fromEmail = emailConfig["FromEmail"] ?? "bgpoona.jamiat53@gmail.com";
+        _smtpUsername = emailConfig["SmtpUsername"] ?? "burhaniguardspune@gmail.com";
+        _smtpPassword = emailConfig["SmtpPassword"] ?? "kbus yxun awvq xjjs";
+        _fromEmail = emailConfig["FromEmail"] ?? "burhaniguardspune@gmail.com";
         _fromName = emailConfig["FromName"] ?? "Burhani Guards Pune";
     }
 
@@ -52,6 +52,15 @@ public class EmailService : IEmailService
             return; // Skip if no email address
         }
 
+        // Only allow Reset Password and Forgot Password emails
+        bool isPasswordFlow = subject.Contains("Password Reset", StringComparison.OrdinalIgnoreCase) || 
+                              subject.Contains("Forgot Password", StringComparison.OrdinalIgnoreCase);
+        
+        if (!isPasswordFlow)
+        {
+            return;
+        }
+
         try
         {
             using var message = new MailMessage();
@@ -73,10 +82,9 @@ public class EmailService : IEmailService
 
     public async Task SendBulkEmailAsync(List<string> toList, string subject, string body, bool isHtml = true)
     {
-        if (toList == null || !toList.Any())
-        {
-            return;
-        }
+        // As requested, stop all other mail triggering except Reset/Forgot Password
+        // Since Bulk emails are not used for Reset/Forgot Password, disable completely.
+        return;
 
         // Remove duplicates and empty emails
         var uniqueEmails = toList

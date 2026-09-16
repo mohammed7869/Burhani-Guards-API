@@ -19,6 +19,7 @@ public static class Jamaat
     public const int SaifeeMohallah = 12;
     public const int TaiyebiMohalla = 13;
     public const int FatemiMohalla = 14;
+    public const int Itwara = 15;
 
     /// <summary>
     /// Gets jamaat text from ID
@@ -41,6 +42,7 @@ public static class Jamaat
             SaifeeMohallah => "SAIFEE MOHALLAH (POONA)",
             TaiyebiMohalla => "TAIYEBI MOHALLA (POONA)",
             FatemiMohalla => "FATEMI MOHALLA (POONA)",
+            Itwara => "ITWARA",
             _ => "Unknown"
         };
     }
@@ -66,6 +68,7 @@ public static class Jamaat
             "SAIFEE MOHALLAH (POONA)" => SaifeeMohallah,
             "TAIYEBI MOHALLA (POONA)" => TaiyebiMohalla,
             "FATEMI MOHALLA (POONA)" => FatemiMohalla,
+            "ITWARA" => Itwara,
             _ => null
         };
     }

@@ -32,8 +32,8 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Check if user is Captain (role = 2)
-        if (CurrentUser.roles != 2)
+        // Check if user is Captain (role = 2) or Major Captain (role = 6)
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6)
         {
             return Forbid("Only Captains can create miqaats");
         }
@@ -76,7 +76,10 @@ public class MiqaatController : BaseController
             {
                 await _sendMiqaatCreatedNotification(request, response.Id, notificationImage);
             }
-            catch { /* Don't fail miqaat creation if notification fails */ }
+            catch (Exception ex)
+            { 
+                BurhaniGuards.Api.FileLogger.Log($"_sendMiqaatCreatedNotification failed: {ex}");
+            }
 
             return Ok(response);
         }
@@ -317,7 +320,7 @@ public class MiqaatController : BaseController
 
         try
         {
-            if (CurrentUser.roles == 2)
+            if (CurrentUser.roles == 2 || CurrentUser.roles == 6)
             {
                 if (string.IsNullOrWhiteSpace(CurrentUser.jamaat))
                 {
@@ -428,8 +431,7 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains and Admins can view enrolled members
-        if (CurrentUser.roles != 2 && CurrentUser.roles != 7)
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6 && CurrentUser.roles != 7)
         {
             return Forbid("Only Captains or Admins can view enrolled members");
         }
@@ -453,8 +455,7 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains and Admins can view all members
-        if (CurrentUser.roles != 2 && CurrentUser.roles != 7)
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6 && CurrentUser.roles != 7)
         {
             return Forbid("Only Captains or Admins can view all members");
         }
@@ -462,7 +463,7 @@ public class MiqaatController : BaseController
         try
         {
             // Captains only see members from their own jamaat; Admins see all
-            string? captainJamaat = CurrentUser.roles == 2 ? CurrentUser.jamaat : null;
+            string? captainJamaat = (CurrentUser.roles == 2 || CurrentUser.roles == 6) ? CurrentUser.jamaat : null;
             var members = await _miqaatService.GetAllMembersByMiqaatId(miqaatId, captainJamaat);
             return Ok(members);
         }
@@ -494,7 +495,7 @@ public class MiqaatController : BaseController
             {
                 return Forbid("Only Admin can view approved members for attendance on this miqaat");
             }
-            else if (CurrentUser.roles != 2)
+            else if (CurrentUser.roles != 2 && CurrentUser.roles != 6)
             {
                 return Forbid("Only Captains can view approved members for attendance");
             }
@@ -545,8 +546,7 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Captains and Admin can update final status
-        if (CurrentUser.roles != 2 && CurrentUser.roles != 7)
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6 && CurrentUser.roles != 7)
         {
             return Forbid("Only Captains or Admin can update final status");
         }
@@ -698,8 +698,7 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Allow both Captains and the member themselves to view enrollment days
-        if (CurrentUser.roles != 2 && CurrentUser.id != memberId)
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6 && CurrentUser.id != memberId)
         {
             return Forbid("You can only view your own enrollment days");
         }
@@ -737,7 +736,7 @@ public class MiqaatController : BaseController
             {
                 return Forbid("Only Admin can mark attendance for this miqaat");
             }
-            else if (CurrentUser.roles != 2)
+            else if (CurrentUser.roles != 2 && CurrentUser.roles != 6)
             {
                 return Forbid("Only Captains can mark attendance");
             }
@@ -776,7 +775,7 @@ public class MiqaatController : BaseController
         }
 
         // Only Captains can submit miqaat reports
-        if (CurrentUser.roles != 2)
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6)
         {
             return Forbid("Only Captains can submit miqaat reports");
         }

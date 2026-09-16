@@ -19,14 +19,10 @@ using MySqlMemberSnapshotRepository = BurhaniGuards.Api.Repositories.MySql.Membe
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Kestrel to listen on all interfaces (0.0.0.0) for network access
-// We only apply this in Production to prevent local port conflicts
-if (!builder.Environment.IsDevelopment())
+builder.WebHost.ConfigureKestrel(options =>
 {
-    builder.WebHost.ConfigureKestrel(options =>
-    {
-        options.ListenAnyIP(5000); // Listen on all network interfaces on port 5000
-    });
-}
+    options.ListenAnyIP(5000); // Listen on all network interfaces on port 5000
+});
 
 // Configure JSON options to use camelCase
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -103,6 +99,7 @@ builder.Services.AddScoped<IQardanHasanaRepository, QardanHasanaRepository>();
 builder.Services.AddScoped<IQardanRepaymentRepository, QardanRepaymentRepository>();
 builder.Services.AddScoped<ISurveyRepository, SurveyRepository>();
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<IJamaatTransferRepository, JamaatTransferRepository>();
 
 // Register old repositories (for backward compatibility if needed)
 builder.Services.AddScoped<BurhaniGuards.Api.Repositories.Interfaces.ICaptainRepository, BurhaniGuards.Api.Repositories.SqlServer.CaptainRepository>();
@@ -119,6 +116,7 @@ builder.Services.AddScoped<IQardanHasanaService, QardanHasanaService>();
 builder.Services.AddScoped<IQardanRepaymentService, QardanRepaymentService>();
 builder.Services.AddScoped<ISurveyService, SurveyService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IJamaatTransferService, JamaatTransferService>();
 builder.Services.AddSingleton<IFcmPushService, FcmPushService>();
 
 // Register old services (for backward compatibility if needed)

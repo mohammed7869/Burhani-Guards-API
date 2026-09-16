@@ -432,6 +432,24 @@ public class AuthController : BaseController
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             await _memberRepository.ResetPassword(member.Id, hashedPassword);
 
+            // Send password reset confirmation email
+            if (!string.IsNullOrWhiteSpace(member.Email))
+            {
+                var emailBody = $@"
+                    <html>
+                    <body style='font-family: Arial, sans-serif; padding: 20px;'>
+                        <h2 style='color: #2e7d32;'>Password Reset Successful</h2>
+                        <p>Dear {member.FullName},</p>
+                        <p>Your password for Burhani Guards Pune has been successfully reset.</p>
+                        <p>If you did not perform this action, please contact the administrator immediately.</p>
+                        <br/>
+                        <p>Regards,<br/>Burhani Guards Pune</p>
+                    </body>
+                    </html>";
+
+                await _emailService.SendEmailAsync(member.Email, "Password Reset Successful - Burhani Guards", emailBody);
+            }
+
             return Ok(new ResetPasswordResponse(true, "Password reset successfully. Please login with your new password."));
         }
         catch (Exception ex)

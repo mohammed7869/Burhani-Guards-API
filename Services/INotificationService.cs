@@ -62,4 +62,10 @@ public interface INotificationService
     /// Get all notification logs (admin only).
     /// </summary>
     Task<IEnumerable<NotificationDto>> GetAllLogsAsync();
+
+    /// <summary>
+    /// Resend FCM push for all notifications created since a given UTC datetime.
+    /// Does NOT create new DB records — only re-triggers the FCM push.
+    /// </summary>
+    Task<int> ResendMissedNotificationsAsync(DateTime sinceUtc);
 }

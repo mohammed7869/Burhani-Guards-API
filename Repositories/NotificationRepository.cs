@@ -96,6 +96,7 @@ public class NotificationRepository : INotificationRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error bulk creating notifications");
+            BurhaniGuards.Api.FileLogger.Log($"BulkCreateAsync failed: {ex}");
             throw;
         }
     }
@@ -260,6 +261,48 @@ public class NotificationRepository : INotificationRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching all notification logs");
+            throw;
+        }
+    }
+
+    public async Task<IEnumerable<(Notification Notification, List<int> UserIds)>> GetDistinctNotificationsSinceAsync(DateTime sinceUtc)
+    {
+        // Get all notifications since the given date
+        const string sql = @"
+            SELECT 
+                `id` AS Id, 
+                `user_id` AS UserId, 
+                `title` AS Title, 
+                `body` AS Body, 
+                `type` AS Type, 
+                `reference_id` AS ReferenceId,
+                `image_url` AS ImageUrl,
+                `link_url` AS LinkUrl,
+                `is_read` AS IsRead, 
+                `created_at` AS CreatedAt, 
+                `read_at` AS ReadAt
+            FROM `notifications`
+            WHERE `created_at` >= @SinceUtc
+            ORDER BY `created_at` DESC";
+
+        try
+        {
+            using var connection = _context.CreateConnection();
+            var allNotifications = (await connection.QueryAsync<Notification>(sql, new { SinceUtc = sinceUtc })).ToList();
+
+            // Group by title+body+type to get distinct notifications with their user IDs
+            var grouped = allNotifications
+                .GroupBy(n => new { n.Title, n.Body, n.Type, n.ReferenceId, n.ImageUrl, n.LinkUrl })
+                .Select(g => (
+                    Notification: g.First(),
+                    UserIds: g.Select(n => n.UserId).Distinct().ToList()
+                ));
+
+            return grouped;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching distinct notifications since {SinceUtc}", sinceUtc);
             throw;
         }
     }

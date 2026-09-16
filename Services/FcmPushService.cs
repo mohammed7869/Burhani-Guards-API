@@ -85,9 +85,18 @@ public class FcmPushService : IFcmPushService
 
         try
         {
+            // Include title & body in data payload for new APK compatibility
+            var dataPayload = data != null ? new Dictionary<string, string>(data) : new Dictionary<string, string>();
+            dataPayload["title"] = title;
+            dataPayload["body"] = body;
+            if (!string.IsNullOrEmpty(imageUrl))
+                dataPayload["imageUrl"] = imageUrl;
+
             var message = new Message
             {
                 Token = fcmToken,
+                // Include Notification payload so old APKs can auto-display.
+                // EventTimestamp fixes the "2032y" incorrect date display.
                 Notification = new Notification
                 {
                     Title = title,
@@ -102,10 +111,11 @@ public class FcmPushService : IFcmPushService
                         Sound = "default",
                         ClickAction = "FLUTTER_NOTIFICATION_CLICK",
                         ChannelId = "bgp_notifications",
-                        ImageUrl = imageUrl
+                        ImageUrl = imageUrl,
+                        EventTimestamp = DateTime.UtcNow
                     }
                 },
-                Data = data ?? new Dictionary<string, string>()
+                Data = dataPayload
             };
 
             var response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
@@ -146,6 +156,13 @@ public class FcmPushService : IFcmPushService
         {
             try
             {
+                // Include title & body in data payload for new APK compatibility
+                var dataPayload = data != null ? new Dictionary<string, string>(data) : new Dictionary<string, string>();
+                dataPayload["title"] = title;
+                dataPayload["body"] = body;
+                if (!string.IsNullOrEmpty(imageUrl))
+                    dataPayload["imageUrl"] = imageUrl;
+
                 var multicast = new MulticastMessage
                 {
                     Tokens = batch.ToList(),
@@ -163,10 +180,11 @@ public class FcmPushService : IFcmPushService
                             Sound = "default",
                             ClickAction = "FLUTTER_NOTIFICATION_CLICK",
                             ChannelId = "bgp_notifications",
-                            ImageUrl = imageUrl
+                            ImageUrl = imageUrl,
+                            EventTimestamp = DateTime.UtcNow
                         }
                     },
-                    Data = data ?? new Dictionary<string, string>()
+                    Data = dataPayload
                 };
 
                 var response = await FirebaseMessaging.DefaultInstance.SendEachForMulticastAsync(multicast);

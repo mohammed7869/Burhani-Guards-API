@@ -300,6 +300,34 @@ public class NotificationController : BaseController
         }
     }
 
+    /// <summary>
+    /// Resend FCM push for missed notifications (admin only).
+    /// POST /api/1/notifications/resend-missed?sinceUtc=2026-09-07T00:00:00Z
+    /// Does NOT create new database records — only re-triggers the FCM push.
+    /// </summary>
+    [HttpPost("resend-missed")]
+    public async Task<IActionResult> ResendMissedNotifications([FromQuery] DateTime sinceUtc)
+    {
+        var user = GetCurrentUser();
+        if (user == null) return Unauthorized("User not authenticated");
+
+        if (user.roles == null || (user.roles & 1) == 0)
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var sentCount = await _notificationService.ResendMissedNotificationsAsync(sinceUtc);
+            return Ok(new { message = $"Resent FCM push to {sentCount} devices", sentCount });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resending missed notifications");
+            return StatusCode(500, new { message = "Error resending missed notifications" });
+        }
+    }
+
     private async Task<string?> SaveNotificationImage(IFormFile? file)
     {
         if (file == null || file.Length == 0) return null;

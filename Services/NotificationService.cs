@@ -178,6 +178,7 @@ public class NotificationService : INotificationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending notification to {Count} users", userIdList.Count);
+            BurhaniGuards.Api.FileLogger.Log($"SendToUsersAsync failed: {ex}");
             throw;
         }
     }
@@ -291,6 +292,7 @@ public class NotificationService : INotificationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending notification to jamaat {Jamaat}", jamaat);
+            BurhaniGuards.Api.FileLogger.Log($"SendToJamaatAsync failed for {jamaat}: {ex}");
             throw;
         }
     }
@@ -396,5 +398,47 @@ public class NotificationService : INotificationService
             // Assuming NotificationDto might have UserId if needed, but since it doesn't currently, we might need to add it or return a different DTO.
             // Oh wait, NotificationDto probably doesn't have UserId based on the GetUserNotificationsAsync method, let's map it anyway. Wait, the frontend needs `user_id`.
         }).ToList();
+    }
+
+    public async Task<int> ResendMissedNotificationsAsync(DateTime sinceUtc)
+    {
+        var distinctNotifications = await _notificationRepo.GetDistinctNotificationsSinceAsync(sinceUtc);
+        var totalSent = 0;
+
+        foreach (var (notification, userIds) in distinctNotifications)
+        {
+            try
+            {
+                // Get FCM tokens for all affected users
+                var fcmTokens = await _userRepo.GetFcmTokensAsync(userIds);
+
+                if (fcmTokens.Count == 0) continue;
+
+                var data = new Dictionary<string, string>
+                {
+                    ["type"] = notification.Type ?? "general",
+                    ["referenceId"] = notification.ReferenceId ?? ""
+                };
+                if (!string.IsNullOrEmpty(notification.LinkUrl))
+                {
+                    data["linkUrl"] = notification.LinkUrl;
+                }
+
+                var sent = await _fcmPushService.SendToMultipleAsync(
+                    fcmTokens.Values, notification.Title, notification.Body, data, notification.ImageUrl);
+
+                totalSent += sent;
+
+                _logger.LogInformation(
+                    "Resent notification '{Title}' to {Sent}/{Total} devices",
+                    notification.Title, sent, fcmTokens.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to resend notification '{Title}'", notification.Title);
+            }
+        }
+
+        return totalSent;
     }
 }

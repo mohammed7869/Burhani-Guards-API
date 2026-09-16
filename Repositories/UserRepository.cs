@@ -34,6 +34,7 @@ public interface IUserRepository
     Task UpdateFcmTokenAsync(int userId, string token);
     Task<string?> GetFcmTokenAsync(int userId);
     Task<Dictionary<int, string>> GetFcmTokensAsync(IEnumerable<int> userIds);
+    Task UpdateJamaatAsync(int memberId, int jamaatId, string jamaat, int jamiyatId, string jamiyat);
 }
 
 public class UserRepository : IUserRepository
@@ -218,6 +219,29 @@ public class UserRepository : IUserRepository
             {
                 throw new Exception("Failed to update user");
             }
+        }
+    }
+
+    public async Task UpdateJamaatAsync(int memberId, int jamaatId, string jamaat, int jamiyatId, string jamiyat)
+    {
+        using (var connection = _context.CreateConnection())
+        {
+            var sql = @"UPDATE `members` 
+                        SET `jamaat_id` = @JamaatId, 
+                            `jamaat` = @Jamaat,
+                            `jamiyat_id` = @JamiyatId,
+                            `jamiyat` = @Jamiyat,
+                            `updated_at` = @UpdatedAt
+                        WHERE `id` = @Id";
+            await connection.ExecuteAsync(sql, new 
+            { 
+                JamaatId = jamaatId, 
+                Jamaat = jamaat, 
+                JamiyatId = jamiyatId,
+                Jamiyat = jamiyat,
+                UpdatedAt = DateTime.UtcNow,
+                Id = memberId 
+            });
         }
     }
 
@@ -789,7 +813,7 @@ public class UserRepository : IUserRepository
                     `updated_at` AS UpdatedAt
                 FROM `members`
                 WHERE `full_name` = @CaptainName
-                    AND `rank` = 'Captain'
+                    AND `roles` IN (2, 6)
                     AND `is_active` = 1
                 LIMIT 1
             ";
@@ -848,7 +872,7 @@ public class UserRepository : IUserRepository
                     `updated_at` AS UpdatedAt
                 FROM `members`
                 WHERE `jamaat` = @Jamaat
-                    AND `roles` = 2
+                    AND `roles` IN (2, 6)
                     AND `is_active` = 1
                 LIMIT 1
             ";

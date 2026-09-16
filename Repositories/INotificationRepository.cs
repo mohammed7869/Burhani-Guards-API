@@ -51,4 +51,10 @@ public interface INotificationRepository
     /// Get all notification logs (admin only).
     /// </summary>
     Task<IEnumerable<Notification>> GetAllLogsAsync();
+
+    /// <summary>
+    /// Get distinct notifications (by title+body) created since a UTC datetime,
+    /// along with all user IDs that should receive them. Used for resending missed FCM pushes.
+    /// </summary>
+    Task<IEnumerable<(Notification Notification, List<int> UserIds)>> GetDistinctNotificationsSinceAsync(DateTime sinceUtc);
 }

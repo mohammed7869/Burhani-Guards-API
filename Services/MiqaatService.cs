@@ -251,7 +251,6 @@ public class MiqaatService : IMiqaatService
         // Send email notifications
         _ = Task.Run(async () =>
         {
-            return; // Disabled per user request
             try
             {
                 var typeLabel = miqaatType == "International" ? "International" : "Local";
@@ -707,10 +706,10 @@ public class MiqaatService : IMiqaatService
 
     public async Task<List<MiqaatResponse>> GetMiqaatsForCurrentUser(int userId, int? userRole, string? captainName)
     {
-        // If user is Captain (role = 2), return miqaats created by them
+        // If user is Captain (role = 2) or Major Captain (role = 6), return miqaats created by them
         // PLUS admin-created miqaats where they are enrolled as a member
         // (International or multi-jamaat Local miqaats)
-        if (userRole == 2 && !string.IsNullOrWhiteSpace(captainName))
+        if ((userRole == 2 || userRole == 6) && !string.IsNullOrWhiteSpace(captainName))
         {
             var captainMiqaats = await GetMiqaatsByCaptainName(captainName);
             var memberMiqaats = await GetMiqaatsByMemberId(userId);

@@ -177,6 +177,7 @@ public sealed class MySqlBootstrapper
         }
         catch { } // Index might already exist
 
+        /*
         // Migration: Populate jamiyat_id and jamaat_id from existing text values
         try
         {
@@ -212,6 +213,7 @@ public sealed class MySqlBootstrapper
                 """);
         }
         catch { } // Migration might fail if columns don't exist yet
+        */
 
         // Create member_snapshots table
         await dbConnection.ExecuteAsync("""
@@ -250,6 +252,35 @@ public sealed class MySqlBootstrapper
                 INDEX `IX_activity_logs_performer` (`performed_by_id`),
                 INDEX `IX_activity_logs_target` (`target_member_id`),
                 INDEX `IX_activity_logs_created_at` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """);
+
+        // Create jamaat_transfers table for tracking member jamaat transfers
+        await dbConnection.ExecuteAsync("""
+            CREATE TABLE IF NOT EXISTS `jamaat_transfers` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `member_id` INT NOT NULL,
+                `member_its_id` VARCHAR(50) NOT NULL,
+                `from_jamaat_id` INT NOT NULL,
+                `from_jamaat` VARCHAR(255) NOT NULL,
+                `to_jamaat_id` INT NOT NULL,
+                `to_jamaat` VARCHAR(255) NOT NULL,
+                `jamiyat_id` INT NOT NULL,
+                `jamiyat` VARCHAR(255) NOT NULL,
+                `status` VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+                `initiated_by_id` INT NOT NULL,
+                `initiated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `accepted_by_id` INT NULL,
+                `accepted_at` DATETIME NULL,
+                `approved_by_id` INT NULL,
+                `approved_at` DATETIME NULL,
+                `rejected_by_id` INT NULL,
+                `rejected_at` DATETIME NULL,
+                `rejection_reason` TEXT NULL,
+                INDEX `IX_jamaat_transfers_member_id` (`member_id`),
+                INDEX `IX_jamaat_transfers_from_jamaat_id` (`from_jamaat_id`),
+                INDEX `IX_jamaat_transfers_to_jamaat_id` (`to_jamaat_id`),
+                INDEX `IX_jamaat_transfers_status` (`status`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             """);
 
@@ -362,6 +393,7 @@ public sealed class MySqlBootstrapper
         }
         catch { } // Column might already exist
 
+        /*
         // Migration: Restore member enrollment statuses that were accidentally reset based on activity_logs
         try
         {
@@ -377,7 +409,9 @@ public sealed class MySqlBootstrapper
                 """);
         }
         catch { }
+        */
 
+        /*
         // Seed default captain if not exists
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(CaptainDefaults.Password);
         await dbConnection.ExecuteAsync("""
@@ -394,6 +428,7 @@ public sealed class MySqlBootstrapper
                 Name = CaptainDefaults.Name,
                 PasswordHash = hashedPassword
             });
+        */
     }
 }
 

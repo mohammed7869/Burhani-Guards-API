@@ -110,8 +110,8 @@ public class QardanHasanaController : BaseController
                 return Ok(all);
             }
 
-            // Captain (2) sees jamaat applications
-            if (CurrentUser.roles == 2)
+            // Captain (2) or Major Captain (6) sees jamaat applications
+            if (CurrentUser.roles == 2 || CurrentUser.roles == 6)
             {
                 var jamaatApps = await _service.GetByJamaat(CurrentUser.jamaat ?? "");
                 return Ok(jamaatApps);
@@ -195,6 +195,7 @@ public class QardanHasanaController : BaseController
             // Check access: Admin can see all, Captain can see jamaat, Member can see own or guarantor
             if (CurrentUser.roles != 7 &&
                 CurrentUser.roles != 2 &&
+                CurrentUser.roles != 6 &&
                 application.ApplicantMemberId != CurrentUser.id &&
                 application.GuarantorMemberId != CurrentUser.id &&
                 application.CaptainMemberId != CurrentUser.id)
@@ -548,6 +549,7 @@ public class QardanHasanaController : BaseController
             // Same access rule as GetById
             if (CurrentUser.roles != 7 &&
                 CurrentUser.roles != 2 &&
+                CurrentUser.roles != 6 &&
                 application.ApplicantMemberId != CurrentUser.id &&
                 application.GuarantorMemberId != CurrentUser.id &&
                 application.CaptainMemberId != CurrentUser.id)
