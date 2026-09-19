@@ -774,10 +774,10 @@ public class MiqaatController : BaseController
             return Unauthorized();
         }
 
-        // Only Captains can submit miqaat reports
-        if (CurrentUser.roles != 2 && CurrentUser.roles != 6)
+        // Only Captains and Admins can submit miqaat reports
+        if (CurrentUser.roles != 2 && CurrentUser.roles != 6 && CurrentUser.roles != 7)
         {
-            return Forbid("Only Captains can submit miqaat reports");
+            return Forbid("Only Captains or Admins can submit miqaat reports");
         }
 
         // Validate mandatory fields
