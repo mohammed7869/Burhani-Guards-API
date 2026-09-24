@@ -766,6 +766,58 @@ public class MiqaatController : BaseController
         }
     }
 
+    [HttpPost("{miqaatId:long}/mark-absent")]
+    public async Task<IActionResult> MarkAbsent(long miqaatId, [FromBody] MarkAttendanceRequest request)
+    {
+        if (CurrentUser == null)
+        {
+            return Unauthorized();
+        }
+
+        // Check miqaat type to enforce role-based access
+        var miqaat = await _miqaatService.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            return NotFound(new { message = "Miqaat not found" });
+        }
+
+        // Admin (role 7) has full access to mark attendance/absent for all miqaat types
+        if (CurrentUser.roles != 7)
+        {
+            if (miqaat.MiqaatType == "International" || miqaat.IsAdminCreated)
+            {
+                return Forbid("Only Admin can mark absent for this miqaat");
+            }
+            else if (CurrentUser.roles != 2 && CurrentUser.roles != 6)
+            {
+                return Forbid("Only Captains can mark absent");
+            }
+        }
+
+        try
+        {
+            await _miqaatService.MarkAbsentBatch(miqaatId, request.Day, request.MemberIds);
+
+            // Notify each member that they were marked absent
+            try
+            {
+                await _notificationService.SendToUsersAsync(
+                    request.MemberIds,
+                    "Marked Absent ❌",
+                    $"You have been marked absent for Day {request.Day}.",
+                    "miqaat",
+                    miqaatId.ToString());
+            }
+            catch { /* Don't fail absent marking if notification fails */ }
+
+            return Ok(new { message = "Marked absent successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{miqaatId:long}/report")]
     public async Task<IActionResult> SubmitMiqaatReport(long miqaatId, [FromForm] SubmitMiqaatReportRequest request)
     {

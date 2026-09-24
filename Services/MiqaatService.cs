@@ -854,7 +854,7 @@ public class MiqaatService : IMiqaatService
         
         return members.Select(m => new EnrolledMemberResponse(
             m.Id, m.FullName, m.Email, m.Contact, m.Rank, m.Jamaat, m.Jamiyat,
-            null, m.ItsId, m.IsAttended, "Pending", m.AdminStatus
+            null, m.ItsId, m.IsAttended, "Pending", m.AdminStatus, null, m.IsAbsent
         )).ToList();
     }
 
@@ -898,8 +898,11 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             finalStatuses.GetValueOrDefault(m.Id),
             m.ItsId,
-            attendanceStatuses.GetValueOrDefault(m.Id),
-            "Enrolled"  // These members have at least one approved day
+            attendanceStatuses.GetValueOrDefault(m.Id).IsAttended,
+            "Enrolled",  // These members have at least one approved day
+            null,
+            null,
+            attendanceStatuses.GetValueOrDefault(m.Id).IsAbsent
         )).ToList();
     }
 
@@ -933,8 +936,11 @@ public class MiqaatService : IMiqaatService
             ms.Member.Jamiyat,
             finalStatuses.GetValueOrDefault(ms.Member.Id),
             ms.Member.ItsId,
-            attendanceStatuses.GetValueOrDefault(ms.Member.Id),
-            ms.StatusCategory
+            attendanceStatuses.GetValueOrDefault(ms.Member.Id).IsAttended,
+            ms.StatusCategory,
+            null,
+            null,
+            attendanceStatuses.GetValueOrDefault(ms.Member.Id).IsAbsent
         )).ToList();
     }
 
@@ -958,6 +964,13 @@ public class MiqaatService : IMiqaatService
         var members = await _miqaatMemberRepository.GetApprovedMembersForAttendance(miqaatId, day);
         var attendanceStatuses = await _miqaatMemberRepository.GetAttendanceStatusesByMiqaatId(miqaatId, day);
         
+        // For multi-day miqaats (day > 1), fetch absent days for each member
+        Dictionary<long, List<int>>? absentDaysMap = null;
+        if (day > 1)
+        {
+            absentDaysMap = await _miqaatMemberRepository.GetAbsentDaysBeforeDay(miqaatId, day);
+        }
+
         return members.Select(m => new EnrolledMemberResponse(
             m.Id,
             m.FullName,
@@ -968,9 +981,74 @@ public class MiqaatService : IMiqaatService
             m.Jamiyat,
             "Approved", // All members from this method already have final_status = 'Approved'
             m.ItsId,
-            attendanceStatuses.GetValueOrDefault(m.Id),
-            "Enrolled"  // These members are fully approved
+            attendanceStatuses.GetValueOrDefault(m.Id).IsAttended,
+            "Enrolled",  // These members are fully approved
+            null, // AdminStatus
+            absentDaysMap?.GetValueOrDefault(m.Id), // AbsentDays - list of previous days where member was absent
+            attendanceStatuses.GetValueOrDefault(m.Id).IsAbsent
         )).ToList();
+    }
+
+    public async Task MarkAbsentBatch(long miqaatId, int day, List<int> memberIds)
+    {
+        if (memberIds == null || !memberIds.Any())
+        {
+            throw new Exception("Member IDs list cannot be empty");
+        }
+
+        if (day < 1)
+        {
+            throw new Exception("Day must be >= 1");
+        }
+
+        var miqaat = await _miqaatRepository.GetById(miqaatId);
+        if (miqaat == null)
+        {
+            throw new Exception("Miqaat not found");
+        }
+        if (day > miqaat.MiqaatDays)
+        {
+            throw new Exception($"Day must be between 1 and {miqaat.MiqaatDays}");
+        }
+
+        // ── Attendance Time Window Validation (same as MarkAttendanceBatch) ──
+        var nowIst = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, IndiaTimeZone);
+
+        if (miqaat.MiqaatDays == 1)
+        {
+            var windowStart = miqaat.FromDate.Date;
+            var windowEnd = miqaat.TillDate.Date.AddDays(1).AddHours(24);
+            if (nowIst < windowStart || nowIst > windowEnd)
+            {
+                var endDisplay = miqaat.TillDate.Date.AddDays(2).ToString("dd MMM yyyy hh:mm tt");
+                throw new Exception($"Attendance window closed. Marking can only be done from {miqaat.FromDate:dd MMM yyyy} until {endDisplay} (24 hours after miqaat ends).");
+            }
+        }
+        else
+        {
+            var dayDate = miqaat.FromDate.Date.AddDays(day - 1);
+            var windowStart = dayDate;
+            var windowEnd = dayDate.AddHours(48);
+            if (nowIst < windowStart || nowIst > windowEnd)
+            {
+                var endDisplay = dayDate.AddDays(2).ToString("dd MMM yyyy hh:mm tt");
+                throw new Exception($"Attendance window closed for Day {day} ({dayDate:dd MMM yyyy}). Marking can be done until {endDisplay} (24 hours after that day).");
+            }
+        }
+
+        await _miqaatMemberRepository.MarkAbsentBatch(miqaatId, day, memberIds);
+
+        // Log activity
+        var currentUser = GetCurrentUser();
+        var performerName = currentUser?.fullName ?? miqaat.CaptainName;
+        var performerRole = currentUser?.roles == 7 ? "Admin" : "Captain";
+        var performerId = currentUser?.id;
+
+        try
+        {
+            await _activityLogService.LogAttendanceMarkedAsync(miqaatId, miqaat.MiqaatName, day, memberIds, performerName, performerId, performerRole);
+        }
+        catch { /* Don't fail if logging fails */ }
     }
 
     /// <summary>
@@ -1207,7 +1285,9 @@ public class MiqaatService : IMiqaatService
             m.AdminStatus == "Approved" ? "Admin Approved" 
                 : m.AdminStatus == "Rejected" ? "Admin Rejected" 
                 : "Pending Admin Approval",
-            m.AdminStatus
+            m.AdminStatus,
+            null,
+            m.IsAbsent
         )).ToList();
     }
 
@@ -1367,7 +1447,12 @@ public class MiqaatService : IMiqaatService
                 i.MiqaatDays,
                 i.MiqaatDay ?? 1,
                 i.IsAttended ?? false,
-                i.Points
+                i.IsAbsent ?? false,
+                i.Points,
+                i.MiqaatType,
+                i.MemberStatus,
+                i.FinalStatus,
+                i.AdminStatus
             )).ToList()
         );
     }

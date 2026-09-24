@@ -12,6 +12,8 @@ public sealed record EnrolledMemberResponse(
     string? ItsId,
     bool? IsAttended,
     string? StatusCategory,  // "Enrolled", "Pending", or "Rejected"
-    string? AdminStatus = null  // For International miqaats: null, "Pending", "Approved", "Rejected"
+    string? AdminStatus = null,  // For International miqaats: null, "Pending", "Approved", "Rejected"
+    List<int>? AbsentDays = null, // Previous days where member was absent (is_attended = 0)
+    bool? IsAbsent = null
 );
 

@@ -35,5 +35,8 @@ public class MemberModel : BaseModel
 
     [NotMapped]
     public bool IsAttended { get; set; }
+
+    [NotMapped]
+    public bool IsAbsent { get; set; }
 }
 

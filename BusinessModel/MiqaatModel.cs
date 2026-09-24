@@ -26,6 +26,7 @@ public class MiqaatModel : BaseModel
     // Day-wise attendance fields (when joined from miqaat_members)
     public int? MiqaatDay { get; set; }
     public bool? IsAttended { get; set; }
+    public bool? IsAbsent { get; set; }
     public int Points { get; set; }
     // Report fields
     public string? MiqaatImage1 { get; set; }

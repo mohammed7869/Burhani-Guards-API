@@ -18,12 +18,14 @@ public interface IMiqaatMemberRepository
     Task<List<(MemberModel Member, string StatusCategory)>> GetAllMembersByMiqaatId(long miqaatId);
     Task<List<MemberModel>> GetApprovedMembersForAttendance(long miqaatId, int day);
     Task<Dictionary<long, string?>> GetFinalStatusesByMiqaatId(long miqaatId);
-    Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
+    Task<Dictionary<long, (bool IsAttended, bool IsAbsent)>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day);
     Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days);
     Task UpdateAdminStatus(int memberId, long miqaatId, string adminStatus, IReadOnlyCollection<int>? days);
     Task<List<MemberModel>> GetCaptainApprovedMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task<List<MemberModel>> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
+    Task MarkAbsentBatch(long miqaatId, int day, List<int> memberIds);
+    Task<Dictionary<long, List<int>>> GetAbsentDaysBeforeDay(long miqaatId, int currentDay);
     Task<(MemberModel Member, List<MiqaatModel> Items, int TotalPoints)> GetMemberAttendanceHistory(int memberId);
     Task<List<MemberEnrollmentDayModel>> GetMemberEnrollmentDays(long miqaatId, int memberId);
     Task<(
@@ -551,7 +553,9 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`contact` AS Contact,
                 m.`is_active` AS IsActive,
                 m.`created_at` AS CreatedAt,
-                m.`updated_at` AS UpdatedAt
+                m.`updated_at` AS UpdatedAt,
+                mm.`is_attended` AS IsAttended,
+                mm.`is_absent` AS IsAbsent
             FROM `members` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
             INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
@@ -613,24 +617,25 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         return result.ToDictionary(r => (long)r.member_id, r => r.final_status as string);
     }
 
-    public async Task<Dictionary<long, bool>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day)
+    public async Task<Dictionary<long, (bool IsAttended, bool IsAbsent)>> GetAttendanceStatusesByMiqaatId(long miqaatId, int day)
     {
         using var connection = _context.CreateConnection();
 
         const string sql = """
-            SELECT `member_id`, `is_attended`
+            SELECT `member_id`, `is_attended`, `is_absent`
             FROM `miqaat_members`
             WHERE `miqaat_id` = @MiqaatId
                 AND `miqaat_day` = @Day
         """;
 
         var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId, Day = day });
-        var attendanceDict = new Dictionary<long, bool>();
+        var attendanceDict = new Dictionary<long, (bool IsAttended, bool IsAbsent)>();
         
         foreach (var row in result)
         {
             var memberId = (long)row.member_id;
             var isAttended = false;
+            var isAbsent = false;
             
             if (row.is_attended != null)
             {
@@ -653,7 +658,27 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 }
             }
             
-            attendanceDict[memberId] = isAttended;
+            if (row.is_absent != null)
+            {
+                if (row.is_absent is bool boolValue)
+                {
+                    isAbsent = boolValue;
+                }
+                else if (row.is_absent is int intValue)
+                {
+                    isAbsent = intValue != 0;
+                }
+                else if (row.is_absent is byte byteValue)
+                {
+                    isAbsent = byteValue != 0;
+                }
+                else
+                {
+                    isAbsent = Convert.ToBoolean(row.is_absent);
+                }
+            }
+            
+            attendanceDict[memberId] = (isAttended, isAbsent);
         }
         
         return attendanceDict;
@@ -668,6 +693,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             INNER JOIN `local_miqaat` lm ON lm.`id` = `miqaat_members`.`miqaat_id`
             SET 
                 `miqaat_members`.`is_attended` = 1,
+                `miqaat_members`.`is_absent` = 0,
                 `miqaat_members`.`points` = 2
             WHERE `miqaat_id` = @MiqaatId 
                 AND `miqaat_day` = @Day
@@ -686,6 +712,67 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
         {
             throw new Exception("No miqaat member records found to update");
         }
+    }
+
+    public async Task MarkAbsentBatch(long miqaatId, int day, List<int> memberIds)
+    {
+        using var connection = _context.CreateConnection();
+
+        const string updateSql = """
+            UPDATE `miqaat_members`
+            SET 
+                `is_attended` = 0,
+                `is_absent` = 1,
+                `points` = 0
+            WHERE `miqaat_id` = @MiqaatId 
+                AND `miqaat_day` = @Day
+                AND `member_id` IN @MemberIds
+        """;
+
+        var rowsAffected = await connection.ExecuteAsync(updateSql, new 
+        { 
+            MiqaatId = miqaatId,
+            Day = day,
+            MemberIds = memberIds
+        });
+
+        if (rowsAffected == 0)
+        {
+            throw new Exception("No miqaat member records found to update");
+        }
+    }
+
+    public async Task<Dictionary<long, List<int>>> GetAbsentDaysBeforeDay(long miqaatId, int currentDay)
+    {
+        using var connection = _context.CreateConnection();
+
+        // Find all days where the member was explicitly marked absent
+        const string sql = """
+            SELECT `member_id`, `miqaat_day`
+            FROM `miqaat_members`
+            WHERE `miqaat_id` = @MiqaatId
+                AND IFNULL(`is_absent`, 0) = 1
+                AND `status` = 'Approved'
+                AND `final_status` = 'Approved'
+            ORDER BY `member_id`, `miqaat_day`
+        """;
+
+        var result = await connection.QueryAsync(sql, new { MiqaatId = miqaatId, CurrentDay = currentDay });
+        var absentDict = new Dictionary<long, List<int>>();
+
+        foreach (var row in result)
+        {
+            var memberId = (long)row.member_id;
+            var day = (int)row.miqaat_day;
+
+            if (!absentDict.ContainsKey(memberId))
+            {
+                absentDict[memberId] = new List<int>();
+            }
+            absentDict[memberId].Add(day);
+        }
+
+        return absentDict;
     }
 
     public async Task UpdateFinalStatus(int memberId, long miqaatId, string finalStatus, IReadOnlyCollection<int>? days)
@@ -777,7 +864,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`is_active` AS IsActive,
                 mm.`admin_status` AS AdminStatus,
                 mm.`miqaat_day` AS MiqaatDay,
-                mm.`is_attended` AS IsAttended
+                mm.`is_attended` AS IsAttended,
+                mm.`is_absent` AS IsAbsent
             FROM `members` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
             INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
@@ -807,6 +895,15 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     else isAttended = Convert.ToBoolean(row.IsAttended);
                 }
 
+                var isAbsent = false;
+                if (row.IsAbsent != null)
+                {
+                    if (row.IsAbsent is bool boolVal) isAbsent = boolVal;
+                    else if (row.IsAbsent is int intVal) isAbsent = intVal != 0;
+                    else if (row.IsAbsent is byte byteVal) isAbsent = byteVal != 0;
+                    else isAbsent = Convert.ToBoolean(row.IsAbsent);
+                }
+
                 members.Add(new MemberModel
                 {
                     Id = (long)row.Id,
@@ -823,7 +920,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     Contact = row.Contact as string,
                     IsActive = row.IsActive as bool? ?? true,
                     AdminStatus = row.AdminStatus as string,
-                    IsAttended = isAttended
+                    IsAttended = isAttended,
+                    IsAbsent = isAbsent
                 });
             }
         }
@@ -880,7 +978,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`is_active` AS IsActive,
                 mm.`admin_status` AS AdminStatus,
                 mm.`miqaat_day` AS MiqaatDay,
-                mm.`is_attended` AS IsAttended
+                mm.`is_attended` AS IsAttended,
+                mm.`is_absent` AS IsAbsent
             FROM `members` m
             INNER JOIN `miqaat_members` mm ON m.`id` = mm.`member_id`
             INNER JOIN `local_miqaat` lm ON lm.`id` = mm.`miqaat_id`
@@ -909,6 +1008,15 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     else isAttended = Convert.ToBoolean(row.IsAttended);
                 }
 
+                var isAbsent = false;
+                if (row.IsAbsent != null)
+                {
+                    if (row.IsAbsent is bool boolVal) isAbsent = boolVal;
+                    else if (row.IsAbsent is int intVal) isAbsent = intVal != 0;
+                    else if (row.IsAbsent is byte byteVal) isAbsent = byteVal != 0;
+                    else isAbsent = Convert.ToBoolean(row.IsAbsent);
+                }
+
                 members.Add(new MemberModel
                 {
                     Id = (long)row.Id,
@@ -925,7 +1033,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                     Contact = row.Contact as string,
                     IsActive = row.IsActive as bool? ?? true,
                     AdminStatus = row.AdminStatus as string,
-                    IsAttended = isAttended
+                    IsAttended = isAttended,
+                    IsAbsent = isAbsent
                 });
             }
         }
@@ -1003,6 +1112,7 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 m.`updated_at` AS UpdatedAt,
                 mm.`miqaat_day` AS MiqaatDay,
                 mm.`is_attended` AS IsAttended,
+                mm.`is_absent` AS IsAbsent,
                 IFNULL(mm.`points`, 0) AS Points,
                 mm.`status` AS MemberStatus,
                 mm.`final_status` AS FinalStatus,
@@ -1011,9 +1121,6 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
             INNER JOIN `local_miqaat` m ON m.`id` = mm.`miqaat_id`
             WHERE mm.`member_id` = @MemberId
                 AND m.`admin_approval` = 'Approved'
-                AND mm.`status` = 'Approved'
-                AND mm.`final_status` = 'Approved'
-                AND (m.`miqaat_type` != 'International' OR mm.`admin_status` = 'Approved')
             ORDER BY m.`from_date` DESC, mm.`miqaat_day` ASC
         """;
 
@@ -1253,7 +1360,8 @@ public class MiqaatMemberRepository : IMiqaatMemberRepository
                 mm.`status`     AS Status,
                 mm.`final_status` AS FinalStatus,
                 mm.`admin_status` AS AdminStatus,
-                IFNULL(mm.`is_attended`, 0) AS IsAttended
+                IFNULL(mm.`is_attended`, 0) AS IsAttended,
+                IFNULL(mm.`is_absent`, 0) AS IsAbsent
             FROM `miqaat_members` mm
             INNER JOIN `members` m ON m.`id` = mm.`member_id`
             WHERE mm.`miqaat_id` = @MiqaatId

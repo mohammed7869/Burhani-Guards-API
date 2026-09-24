@@ -27,6 +27,7 @@ public interface IMiqaatService
     Task<List<EnrolledMemberResponse>> GetCaptainApprovedMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task<List<EnrolledMemberResponse>> GetCaptainPendingMembersForIntlMiqaat(long miqaatId, int? day = null);
     Task MarkAttendanceBatch(long miqaatId, int day, List<int> memberIds);
+    Task MarkAbsentBatch(long miqaatId, int day, List<int> memberIds);
     AttendanceWindowInfo GetAttendanceWindowInfo(long miqaatId, DateTime fromDate, DateTime tillDate, int miqaatDays, int day);
     Task<MemberMiqaatAttendanceHistoryResponse> GetMemberAttendanceHistory(int memberId);
     Task UpdateMiqaatReport(long miqaatId, string? image1, string? image2, string? notes, string? khidmatDone);

@@ -8,7 +8,12 @@ public sealed record MemberMiqaatAttendanceItemResponse(
     int MiqaatDays,
     int MiqaatDay,
     bool IsAttended,
-    int Points
+    bool IsAbsent,
+    int Points,
+    string MiqaatType,
+    string? MemberStatus,
+    string? FinalStatus,
+    string? AdminStatus
 );
 
 public sealed record MemberMiqaatAttendanceHistoryResponse(
